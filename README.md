@@ -13,6 +13,7 @@ private signing key.
 
 ## Requirements
 
+- Linux with mounted `/proc` descriptor paths
 - Node.js 22.19 or newer
 - npm
 - the committed `adapter-catalogue-public.pem`
