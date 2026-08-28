@@ -10,7 +10,9 @@ not read or operate on it.
 Only the human key custodian runs `npm run catalogue:sign` in an interactive
 terminal. The signing command accepts only a regular, non-symlink Ed25519 key
 outside the repository and verifies that it matches the committed production
-public key before publication.
+public key before publication. Encrypted PKCS#8 keys use a hidden passphrase
+prompt; the passphrase must never enter arguments, environment variables,
+files, logs, or chat.
 
 ## Reports
 

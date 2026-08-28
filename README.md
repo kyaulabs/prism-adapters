@@ -55,14 +55,17 @@ custodian runs:
 npm run catalogue:sign
 ```
 
-The command prompts for the private-key path. The key must be a regular,
-non-symlink Ed25519 private key outside this repository. The command derives
-its public key, compares it with `adapter-catalogue-public.pem`, signs the exact
-prepared payload bytes, verifies the resulting envelope, and atomically writes
-`catalogue.json`.
+The command prompts for the private-key path. Absolute paths, relative paths,
+and leading `~/`, `$HOME/`, or `${HOME}/` spellings are accepted; no other
+shell expansion occurs. The key must be a regular, non-symlink Ed25519 private
+key outside this repository. Encrypted PKCS#8 keys trigger a second hidden
+passphrase prompt. The command derives the public key, compares it with
+`adapter-catalogue-public.pem`, signs the exact prepared payload bytes, verifies
+the resulting envelope, and atomically writes `catalogue.json`.
 
-Never put the private key in this repository, another repository, CI, an
-`.env` file, a command argument, a fixture, a log, an issue, or chat.
+Never put the private key, its path, or its passphrase in this repository,
+another repository, CI, an `.env` file, a command argument, an environment
+variable, a fixture, a log, an issue, or chat.
 
 ## Verify and publish
 
