@@ -1,0 +1,18 @@
+{
+  "name": "@kyaulabs/prism-adapters-catalogue",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Human-operated signed catalogue publisher for Prism adapters",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "catalogue:check-key": "node src/cli.js check-key",
+    "catalogue:prepare": "node src/cli.js prepare",
+    "catalogue:sign": "node src/cli.js sign",
+    "catalogue:verify": "node src/cli.js verify"
+  }
+}
