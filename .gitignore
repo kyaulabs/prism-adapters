@@ -1,4 +1,5 @@
 node_modules/
+.pi/
 .publisher/
 *.pem
 !adapter-catalogue-public.pem
