@@ -12,7 +12,8 @@ terminal. The signing command accepts only a regular, non-symlink Ed25519 key
 outside the repository and verifies that it matches the committed production
 public key before publication. Encrypted PKCS#8 keys use a hidden passphrase
 prompt; the passphrase must never enter arguments, environment variables,
-files, logs, or chat.
+files, logs, or chat. The custodian must compare the payload digest shown by
+signing with the digest shown by preparation and confirm only an exact match.
 
 ## Reports
 

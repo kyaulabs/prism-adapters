@@ -59,9 +59,12 @@ The command prompts for the private-key path. Absolute paths, relative paths,
 and leading `~/`, `$HOME/`, or `${HOME}/` spellings are accepted; no other
 shell expansion occurs. The key must be a regular, non-symlink Ed25519 private
 key outside this repository. Encrypted PKCS#8 keys trigger a second hidden
-passphrase prompt. The command derives the public key, compares it with
-`adapter-catalogue-public.pem`, signs the exact prepared payload bytes, verifies
-the resulting envelope, and atomically writes `catalogue.json`.
+passphrase prompt. Preparation prints the SHA-256 digest of the exact payload.
+Before requesting the key, signing prints the current digest and requires the
+custodian to confirm it matches the preparation output. The command then
+derives the public key, compares it with `adapter-catalogue-public.pem`, signs
+the exact prepared payload bytes, verifies the resulting envelope, and
+atomically writes `catalogue.json`.
 
 Never put the private key, its path, or its passphrase in this repository,
 another repository, CI, an `.env` file, a command argument, an environment
