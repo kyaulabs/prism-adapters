@@ -98,10 +98,7 @@ export function verifyEnvelope({
     } catch {
         throw new Error('catalogue payload is invalid');
     }
-    validateCataloguePayload({
-        value: catalogue,
-        now: allowExpired ? new Date(catalogue.issuedAt) : now,
-    });
+    validateCataloguePayload({value: catalogue, now, allowExpired});
     return Object.freeze({
         keyId: envelope.keyId,
         catalogue,

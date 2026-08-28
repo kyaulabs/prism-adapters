@@ -146,7 +146,11 @@ async function fetchPackageMetadata({packageName, version, fetchImpl}) {
     });
 }
 
-export function validateCataloguePayload({value, now = new Date()}) {
+export function validateCataloguePayload({
+    value,
+    now = new Date(),
+    allowExpired = false,
+}) {
     if (!exactKeys(value, [
         'schemaVersion', 'catalogueId', 'sequence', 'issuedAt', 'expiresAt', 'adapters',
     ]) || value.schemaVersion !== 1 || value.catalogueId !== CATALOGUE_ID ||
@@ -166,7 +170,9 @@ export function validateCataloguePayload({value, now = new Date()}) {
         expiresAt.getTime() - issuedAt.getTime() > SEVEN_DAYS) {
         throw new Error('catalogue payload is invalid');
     }
-    if (expiresAt.getTime() <= current.getTime()) throw new Error('catalogue is expired');
+    if (!allowExpired && expiresAt.getTime() <= current.getTime()) {
+        throw new Error('catalogue is expired');
+    }
     readCatalogueSource({
         schemaVersion: 1,
         adapters: value.adapters.map((adapter) => ({

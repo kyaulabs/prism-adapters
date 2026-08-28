@@ -75,6 +75,26 @@ test('rejects a tampered signature', () => {
     );
 });
 
+test('rejects a future-issued envelope during sequence recovery', () => {
+    const {privateKey, publicKey} = generateKeyPairSync('ed25519');
+    const futurePayload = {
+        ...payload,
+        issuedAt: '2026-08-28T12:00:00.000Z',
+        expiresAt: '2026-09-03T12:00:00.000Z',
+    };
+    const bytes = createEnvelope({payload: futurePayload, privateKey, publicKey});
+
+    assert.throws(
+        () => verifyEnvelope({
+            bytes,
+            publicKey,
+            now: new Date('2026-08-28T00:00:00.000Z'),
+            allowExpired: true,
+        }),
+        /catalogue is not yet valid/,
+    );
+});
+
 test('allows an expired signed envelope only for sequence recovery', () => {
     const {privateKey, publicKey} = generateKeyPairSync('ed25519');
     const bytes = createEnvelope({payload, privateKey, publicKey});
