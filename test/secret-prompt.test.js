@@ -1,0 +1,58 @@
+// $KYAULabs: secret-prompt.test.js kyau@aura.kyaulabs 2026/08/28 -0700 Exp $
+
+import assert from 'node:assert/strict';
+import {PassThrough} from 'node:stream';
+import test from 'node:test';
+
+import {readHiddenLine} from '../src/secret-prompt.js';
+
+function terminal() {
+    const stdin = new PassThrough();
+    const modes = [];
+    stdin.isTTY = true;
+    stdin.isRaw = false;
+    stdin.setRawMode = (mode) => {
+        stdin.isRaw = mode;
+        modes.push(mode);
+        return stdin;
+    };
+    let output = '';
+    const stdout = {
+        isTTY: true,
+        write: (chunk) => { output += chunk; },
+    };
+    return {stdin, stdout, modes, output: () => output};
+}
+
+test('reads a bounded passphrase without echo and restores terminal mode', async () => {
+    const fixture = terminal();
+    const pending = readHiddenLine({
+        stdin: fixture.stdin,
+        stdout: fixture.stdout,
+        prompt: 'Private signing key passphrase: ',
+    });
+    fixture.stdin.end(Buffer.from('synthetic-passphrase\n'));
+
+    const secret = await pending;
+
+    assert.equal(secret.toString('utf8'), 'synthetic-passphrase');
+    assert.equal(fixture.output(), 'Private signing key passphrase: \n');
+    assert.deepEqual(fixture.modes, [true, false]);
+    secret.fill(0);
+});
+
+test('cancels without returning secret bytes and restores terminal mode', async () => {
+    const fixture = terminal();
+    const pending = readHiddenLine({
+        stdin: fixture.stdin,
+        stdout: fixture.stdout,
+        prompt: 'Private signing key passphrase: ',
+    });
+    fixture.stdin.end(Buffer.from([0x03]));
+
+    await assert.rejects(pending, /signing cancelled/);
+    assert.equal(fixture.output(), 'Private signing key passphrase: \n');
+    assert.deepEqual(fixture.modes, [true, false]);
+});
+
+// vim: ft=javascript sts=4 sw=4 ts=4 et :
