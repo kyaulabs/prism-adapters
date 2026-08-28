@@ -41,6 +41,28 @@ test('reads a bounded passphrase without echo and restores terminal mode', async
     secret.fill(0);
 });
 
+test('continues terminal cleanup when raw-mode restoration throws', async () => {
+    const fixture = terminal();
+    let paused = false;
+    fixture.stdin.pause = () => { paused = true; return fixture.stdin; };
+    fixture.stdin.setRawMode = (mode) => {
+        fixture.modes.push(mode);
+        if (!mode) throw new Error('synthetic raw-mode failure');
+        fixture.stdin.isRaw = mode;
+        return fixture.stdin;
+    };
+    const pending = readHiddenLine({
+        stdin: fixture.stdin,
+        stdout: fixture.stdout,
+        prompt: 'Private signing key passphrase: ',
+    });
+    fixture.stdin.end(Buffer.from('synthetic-passphrase\n'));
+
+    await assert.rejects(pending, /interactive signing input failed/);
+    assert.equal(paused, true);
+    assert.equal(fixture.output(), 'Private signing key passphrase: \n');
+});
+
 test('rejects a stream error and restores terminal mode', async () => {
     const fixture = terminal();
     const pending = readHiddenLine({

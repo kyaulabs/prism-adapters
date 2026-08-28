@@ -33,6 +33,10 @@ export async function readHiddenLine({stdin, stdout, prompt}) {
             stdin.removeListener('close', onClose);
             try {
                 if (!wasRaw) stdin.setRawMode(false);
+            } catch {
+                error ??= new Error('interactive signing input failed');
+            }
+            try {
                 stdin.pause?.();
                 stdout.write('\n');
             } catch {
