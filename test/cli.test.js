@@ -359,7 +359,16 @@ test('rejects a symlinked publisher work directory', async () => {
         run(['prepare'], {
             cwd: fixture.cwd,
             expectedFingerprint: fixture.key.fingerprint,
-            fetchImpl: async () => { throw new Error('network must not be reached'); },
+            fetchImpl: async () => {
+                const body = JSON.stringify({
+                    versions: {'0.4.1': {dist: {integrity}}},
+                    time: {'0.4.1': '2026-08-27T12:00:00.000Z'},
+                });
+                return new Response(body, {
+                    status: 200,
+                    headers: {'content-length': String(Buffer.byteLength(body))},
+                });
+            },
         }),
         /publisher work directory is invalid/,
     );

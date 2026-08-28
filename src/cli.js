@@ -1,9 +1,11 @@
 // $KYAULabs: cli.js kyau@aura.kyaulabs 2026/08/28 -0700 Exp $
 
 import {createHash, createPrivateKey} from 'node:crypto';
+import {constants} from 'node:fs';
 import {
     lstat,
     mkdir,
+    open,
     realpath,
     rename,
     writeFile,
@@ -97,24 +99,37 @@ async function readOptionalFile(filePath) {
     }
 }
 
-async function ensurePrivateWorkDirectory(workDirectory) {
-    let stat;
+async function openPrivateWorkDirectory({workDirectory, create}) {
+    let handle;
     try {
-        stat = await lstat(workDirectory);
-    } catch (error) {
-        if (error?.code !== 'ENOENT') {
-            throw new Error('publisher work directory is invalid');
+        if (create) {
+            await mkdir(workDirectory, {mode: 0o700}).catch((error) => {
+                if (error?.code !== 'EEXIST') throw error;
+            });
         }
-        try {
-            await mkdir(workDirectory, {mode: 0o700});
-        } catch (mkdirError) {
-            if (mkdirError?.code !== 'EEXIST') {
-                throw new Error('publisher work directory is invalid');
-            }
+        const pathStat = await lstat(workDirectory);
+        if (pathStat.isSymbolicLink() || !pathStat.isDirectory() ||
+            (pathStat.mode & 0o077) !== 0 ||
+            typeof constants.O_DIRECTORY !== 'number' ||
+            typeof constants.O_NOFOLLOW !== 'number') {
+            throw new Error('invalid-directory');
         }
-        stat = await lstat(workDirectory);
-    }
-    if (stat.isSymbolicLink() || !stat.isDirectory() || (stat.mode & 0o077) !== 0) {
+        handle = await open(
+            workDirectory,
+            constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+        );
+        const descriptorStat = await handle.stat();
+        if (!descriptorStat.isDirectory() || descriptorStat.dev !== pathStat.dev ||
+            descriptorStat.ino !== pathStat.ino || (descriptorStat.mode & 0o077) !== 0) {
+            throw new Error('invalid-descriptor');
+        }
+        const descriptorPath = `/proc/self/fd/${handle.fd}`;
+        if (await realpath(descriptorPath) !== await realpath(workDirectory)) {
+            throw new Error('directory-identity-changed');
+        }
+        return {handle, descriptorPath};
+    } catch {
+        await handle?.close().catch(() => {});
         throw new Error('publisher work directory is invalid');
     }
 }
@@ -227,9 +242,7 @@ export async function run(args, {
         return;
     }
     const workDirectory = path.join(cwd, '.publisher');
-    const payloadPath = path.join(workDirectory, 'payload.json');
     if (command === 'prepare') {
-        await ensurePrivateWorkDirectory(workDirectory);
         const sourceBytes = await readRegularFile(path.join(cwd, 'catalogue-source.json'));
         let sourceValue;
         try {
@@ -252,7 +265,16 @@ export async function run(args, {
             fetchImpl,
         });
         const payloadBytes = Buffer.from(`${JSON.stringify(payload)}\n`);
-        await atomicWrite(payloadPath, payloadBytes, 0o600);
+        const work = await openPrivateWorkDirectory({workDirectory, create: true});
+        try {
+            await atomicWrite(
+                path.join(work.descriptorPath, 'payload.json'),
+                payloadBytes,
+                0o600,
+            );
+        } finally {
+            await work.handle.close();
+        }
         const digest = createHash('sha256').update(payloadBytes).digest('hex');
         stdout.write(
             `prepared catalogue sequence ${payload.sequence} digest ${digest} ` +
@@ -263,8 +285,15 @@ export async function run(args, {
     if (!stdin?.isTTY || !stdout?.isTTY) {
         throw new Error('signing requires the human key custodian in an interactive terminal');
     }
-    await ensurePrivateWorkDirectory(workDirectory);
-    const payloadBytes = await readRegularFile(payloadPath);
+    const work = await openPrivateWorkDirectory({workDirectory, create: false});
+    let payloadBytes;
+    try {
+        payloadBytes = await readRegularFile(
+            path.join(work.descriptorPath, 'payload.json'),
+        );
+    } finally {
+        await work.handle.close();
+    }
     let payload;
     try {
         payload = JSON.parse(payloadBytes.toString('utf8'));
