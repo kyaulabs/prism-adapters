@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import {createHash, generateKeyPairSync} from 'node:crypto';
-import {mkdtemp, mkdir, readFile, symlink, writeFile} from 'node:fs/promises';
+import {chmod, mkdtemp, mkdir, readFile, symlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -87,7 +87,7 @@ async function signingRepository({encrypted = true, signingKey = null} = {}) {
     await writeFile(path.join(homeDirectory, 'private.pem'), key.export(exportOptions), {
         mode: 0o600,
     });
-    await mkdir(path.join(fixture.cwd, '.publisher'));
+    await mkdir(path.join(fixture.cwd, '.publisher'), {mode: 0o700});
     await writeFile(
         path.join(fixture.cwd, '.publisher', 'payload.json'),
         `${JSON.stringify(payload())}\n`,
@@ -274,7 +274,7 @@ test('rejects an encrypted private key that does not match the trusted public ke
 
 test('rejects an oversized prepared payload before requesting a key path', async () => {
     const fixture = await repository();
-    await mkdir(path.join(fixture.cwd, '.publisher'));
+    await mkdir(path.join(fixture.cwd, '.publisher'), {mode: 0o700});
     await writeFile(
         path.join(fixture.cwd, '.publisher', 'payload.json'),
         Buffer.alloc(4 * 1024 * 1024 + 1, 7),
@@ -299,7 +299,7 @@ test('rejects an oversized prepared payload before requesting a key path', async
 
 test('rejects a symlinked prepared payload before requesting a key path', async () => {
     const fixture = await repository();
-    await mkdir(path.join(fixture.cwd, '.publisher'));
+    await mkdir(path.join(fixture.cwd, '.publisher'), {mode: 0o700});
     const target = path.join(fixture.cwd, '.publisher', 'target.json');
     const link = path.join(fixture.cwd, '.publisher', 'payload.json');
     await writeFile(target, `${JSON.stringify(payload())}\n`);
@@ -320,6 +320,38 @@ test('rejects a symlinked prepared payload before requesting a key path', async 
         /publisher file must be a bounded regular non-symlink file/,
     );
     assert.equal(pathRequested, false);
+});
+
+test('rejects a symlinked publisher work directory', async () => {
+    const fixture = await repository();
+    const target = await mkdtemp(path.join(tmpdir(), 'prism-publisher-target-'));
+    await symlink(target, path.join(fixture.cwd, '.publisher'));
+
+    await assert.rejects(
+        run(['prepare'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            fetchImpl: async () => { throw new Error('network must not be reached'); },
+        }),
+        /publisher work directory is invalid/,
+    );
+});
+
+test('rejects an insecure publisher work directory', async () => {
+    const fixture = await repository();
+    const workDirectory = path.join(fixture.cwd, '.publisher');
+    await mkdir(workDirectory, {mode: 0o700});
+    await chmod(workDirectory, 0o755);
+
+    await assert.rejects(
+        run(['sign'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            stdin: {isTTY: true},
+            stdout: ttyOutput().stream,
+        }),
+        /publisher work directory is invalid/,
+    );
 });
 
 test('rejects unknown commands', async () => {

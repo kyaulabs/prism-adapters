@@ -85,6 +85,28 @@ async function readOptionalFile(filePath) {
     }
 }
 
+async function ensurePrivateWorkDirectory(workDirectory) {
+    let stat;
+    try {
+        stat = await lstat(workDirectory);
+    } catch (error) {
+        if (error?.code !== 'ENOENT') {
+            throw new Error('publisher work directory is invalid');
+        }
+        try {
+            await mkdir(workDirectory, {mode: 0o700});
+        } catch (mkdirError) {
+            if (mkdirError?.code !== 'EEXIST') {
+                throw new Error('publisher work directory is invalid');
+            }
+        }
+        stat = await lstat(workDirectory);
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory() || (stat.mode & 0o077) !== 0) {
+        throw new Error('publisher work directory is invalid');
+    }
+}
+
 async function atomicWrite(filePath, bytes, mode = 0o644) {
     const temporary = `${filePath}.new`;
     await writeFile(temporary, bytes, {mode, flag: 'wx'});
@@ -194,6 +216,7 @@ export async function run(args, {
     const workDirectory = path.join(cwd, '.publisher');
     const payloadPath = path.join(workDirectory, 'payload.json');
     if (command === 'prepare') {
+        await ensurePrivateWorkDirectory(workDirectory);
         const sourceBytes = await readRegularFile(path.join(cwd, 'catalogue-source.json'));
         let sourceValue;
         try {
@@ -215,7 +238,6 @@ export async function run(args, {
             now,
             fetchImpl,
         });
-        await mkdir(workDirectory, {recursive: true, mode: 0o700});
         await atomicWrite(payloadPath, Buffer.from(`${JSON.stringify(payload)}\n`), 0o600);
         stdout.write(
             `prepared catalogue sequence ${payload.sequence} expires ${payload.expiresAt}\n`,
@@ -225,6 +247,7 @@ export async function run(args, {
     if (!stdin?.isTTY || !stdout?.isTTY) {
         throw new Error('signing requires the human key custodian in an interactive terminal');
     }
+    await ensurePrivateWorkDirectory(workDirectory);
     const payloadBytes = await readRegularFile(payloadPath);
     let payload;
     try {
