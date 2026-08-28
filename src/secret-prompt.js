@@ -28,6 +28,9 @@ export async function readHiddenLine({stdin, stdout, prompt}) {
             if (settled) return;
             settled = true;
             stdin.removeListener('data', onData);
+            stdin.removeListener('error', onError);
+            stdin.removeListener('end', onEnd);
+            stdin.removeListener('close', onClose);
             try {
                 if (!wasRaw) stdin.setRawMode(false);
                 stdin.pause?.();
@@ -68,10 +71,16 @@ export async function readHiddenLine({stdin, stdout, prompt}) {
                     length += 1;
                 }
             } finally {
-                bytes.fill(0);
+                if (!Buffer.isBuffer(chunk)) bytes.fill(0);
             }
         };
+        const onError = () => finish(new Error('interactive signing input failed'));
+        const onEnd = () => finish(new Error('interactive signing input failed'));
+        const onClose = () => finish(new Error('interactive signing input failed'));
         stdin.on('data', onData);
+        stdin.once('error', onError);
+        stdin.once('end', onEnd);
+        stdin.once('close', onClose);
         try {
             if (!wasRaw) stdin.setRawMode(true);
             stdin.resume?.();

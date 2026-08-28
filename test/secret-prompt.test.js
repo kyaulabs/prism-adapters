@@ -41,6 +41,20 @@ test('reads a bounded passphrase without echo and restores terminal mode', async
     secret.fill(0);
 });
 
+test('rejects a stream error and restores terminal mode', async () => {
+    const fixture = terminal();
+    const pending = readHiddenLine({
+        stdin: fixture.stdin,
+        stdout: fixture.stdout,
+        prompt: 'Private signing key passphrase: ',
+    });
+    fixture.stdin.emit('error', new Error('synthetic input failure'));
+
+    await assert.rejects(pending, /interactive signing input failed/);
+    assert.equal(fixture.output(), 'Private signing key passphrase: \n');
+    assert.deepEqual(fixture.modes, [true, false]);
+});
+
 test('cancels without returning secret bytes and restores terminal mode', async () => {
     const fixture = terminal();
     const pending = readHiddenLine({
