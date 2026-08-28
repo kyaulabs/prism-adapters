@@ -7,9 +7,34 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import {verifyEnvelope} from '../src/envelope.js';
 import {run} from '../src/cli.js';
 
 const integrity = `sha512-${Buffer.alloc(64, 19).toString('base64')}`;
+const signingPassphrase = 'synthetic catalogue passphrase';
+
+function payload() {
+    return {
+        schemaVersion: 1,
+        catalogueId: 'kyaulabs/prism-adapters',
+        sequence: 1,
+        issuedAt: '2026-08-28T00:00:00.000Z',
+        expiresAt: '2026-09-03T00:00:00.000Z',
+        adapters: [{
+            id: 'php-web',
+            displayName: 'PHP/web',
+            packageName: '@kyaulabs/prism-php-web',
+            releases: [{
+                version: '0.4.1',
+                coreRange: '>=0.4.1 <0.5.0',
+                bootstrapProtocol: 1,
+                integrity,
+                publishedAt: '2026-08-27T12:00:00.000Z',
+                status: 'ACTIVE',
+            }],
+        }],
+    };
+}
 
 function keys() {
     const pair = generateKeyPairSync('ed25519');
@@ -48,6 +73,33 @@ async function repository() {
         }],
     }));
     return {cwd, key};
+}
+
+async function signingRepository({encrypted = true, signingKey = null} = {}) {
+    const fixture = await repository();
+    const homeDirectory = await mkdtemp(path.join(tmpdir(), 'prism-adapters-home-'));
+    const key = signingKey ?? fixture.key.privateKey;
+    const exportOptions = {type: 'pkcs8', format: 'pem'};
+    if (encrypted) {
+        exportOptions.cipher = 'aes-256-cbc';
+        exportOptions.passphrase = signingPassphrase;
+    }
+    await writeFile(path.join(homeDirectory, 'private.pem'), key.export(exportOptions), {
+        mode: 0o600,
+    });
+    await mkdir(path.join(fixture.cwd, '.publisher'));
+    await writeFile(
+        path.join(fixture.cwd, '.publisher', 'payload.json'),
+        `${JSON.stringify(payload())}\n`,
+        {mode: 0o600},
+    );
+    return {...fixture, homeDirectory};
+}
+
+function ttyOutput() {
+    const fixture = output();
+    fixture.stream.isTTY = true;
+    return fixture;
 }
 
 test('prepares sequence one without exposing signing-key authority', async () => {
@@ -91,6 +143,132 @@ test('sign rejects non-interactive execution before requesting a private key', a
             stdout: output().stream,
         }),
         /signing requires the human key custodian in an interactive terminal/,
+    );
+});
+
+test('signs with an encrypted PKCS8 key resolved from a tilde path', async () => {
+    const fixture = await signingRepository();
+    const stdout = ttyOutput();
+    await run(['sign'], {
+        cwd: fixture.cwd,
+        expectedFingerprint: fixture.key.fingerprint,
+        homeDirectory: fixture.homeDirectory,
+        now: new Date('2026-08-28T00:00:00.000Z'),
+        stdin: {isTTY: true},
+        stdout: stdout.stream,
+        privateKeyPathPrompt: async () => '~/private.pem',
+        passphrasePrompt: async () => Buffer.from(signingPassphrase),
+    });
+
+    const bytes = await readFile(path.join(fixture.cwd, 'catalogue.json'));
+    const verified = verifyEnvelope({
+        bytes,
+        publicKey: fixture.key.publicKey,
+        now: new Date('2026-08-28T00:00:00.000Z'),
+    });
+    assert.equal(verified.catalogue.sequence, 1);
+    assert.match(stdout.value(), /signed catalogue sequence 1/);
+});
+
+for (const supplied of ['$HOME/private.pem', '${HOME}/private.pem']) {
+    test(`signs when the key path uses ${supplied.split('/')[0]}`, async () => {
+        const fixture = await signingRepository();
+        await run(['sign'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            homeDirectory: fixture.homeDirectory,
+            now: new Date('2026-08-28T00:00:00.000Z'),
+            stdin: {isTTY: true},
+            stdout: ttyOutput().stream,
+            privateKeyPathPrompt: async () => supplied,
+            passphrasePrompt: async () => Buffer.from(signingPassphrase),
+        });
+        const bytes = await readFile(path.join(fixture.cwd, 'catalogue.json'));
+        assert.doesNotThrow(() => verifyEnvelope({
+            bytes,
+            publicKey: fixture.key.publicKey,
+            now: new Date('2026-08-28T00:00:00.000Z'),
+        }));
+    });
+}
+
+test('does not evaluate arbitrary environment-style path prefixes', async () => {
+    const fixture = await signingRepository();
+    let passphraseRequested = false;
+    await assert.rejects(
+        run(['sign'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            homeDirectory: fixture.homeDirectory,
+            now: new Date('2026-08-28T00:00:00.000Z'),
+            stdin: {isTTY: true},
+            stdout: ttyOutput().stream,
+            privateKeyPathPrompt: async () => '$USER/private.pem',
+            passphrasePrompt: async () => {
+                passphraseRequested = true;
+                return Buffer.from(signingPassphrase);
+            },
+        }),
+        /private signing key is unavailable or inside the repository/,
+    );
+    assert.equal(passphraseRequested, false);
+});
+
+test('rejects an incorrect encrypted-key passphrase without publication', async () => {
+    const fixture = await signingRepository();
+    await assert.rejects(
+        run(['sign'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            homeDirectory: fixture.homeDirectory,
+            now: new Date('2026-08-28T00:00:00.000Z'),
+            stdin: {isTTY: true},
+            stdout: ttyOutput().stream,
+            privateKeyPathPrompt: async () => '~/private.pem',
+            passphrasePrompt: async () => Buffer.from('incorrect synthetic passphrase'),
+        }),
+        /private signing key is invalid/,
+    );
+    await assert.rejects(
+        readFile(path.join(fixture.cwd, 'catalogue.json')),
+        /ENOENT/,
+    );
+});
+
+test('keeps unencrypted PKCS8 support without requesting a passphrase', async () => {
+    const fixture = await signingRepository({encrypted: false});
+    let passphraseRequested = false;
+    await run(['sign'], {
+        cwd: fixture.cwd,
+        expectedFingerprint: fixture.key.fingerprint,
+        homeDirectory: fixture.homeDirectory,
+        now: new Date('2026-08-28T00:00:00.000Z'),
+        stdin: {isTTY: true},
+        stdout: ttyOutput().stream,
+        privateKeyPathPrompt: async () => '~/private.pem',
+        passphrasePrompt: async () => {
+            passphraseRequested = true;
+            return Buffer.from(signingPassphrase);
+        },
+    });
+    assert.equal(passphraseRequested, false);
+});
+
+test('rejects an encrypted private key that does not match the trusted public key', async () => {
+    const other = generateKeyPairSync('ed25519');
+    const fixture = await signingRepository({signingKey: other.privateKey});
+    await assert.rejects(
+        run(['sign'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            homeDirectory: fixture.homeDirectory,
+            now: new Date('2026-08-28T00:00:00.000Z'),
+            stdin: {isTTY: true},
+            stdout: ttyOutput().stream,
+            privateKeyPathPrompt: async () => '~/private.pem',
+            passphrasePrompt: async () => Buffer.from(signingPassphrase),
+        }),
+        /private key does not match the trusted public key/,
     );
 });
 

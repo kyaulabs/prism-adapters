@@ -9,6 +9,7 @@ import {
     rename,
     writeFile,
 } from 'node:fs/promises';
+import {homedir} from 'node:os';
 import path from 'node:path';
 import {createInterface} from 'node:readline/promises';
 import {pathToFileURL} from 'node:url';
@@ -19,9 +20,47 @@ import {
     EXPECTED_PUBLIC_KEY_SHA256,
     loadTrustedPublicKey,
 } from './public-key.js';
+import {readHiddenLine} from './secret-prompt.js';
 
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
 const MAX_PRIVATE_KEY_BYTES = 65_536;
+const ENCRYPTED_PKCS8_LABEL = Buffer.from('-----BEGIN ENCRYPTED PRIVATE KEY-----');
+const HOME_PREFIXES = ['${HOME}/', '$HOME/', '~/'];
+const MAX_PRIVATE_KEY_PATH_BYTES = 4096;
+
+async function promptForPrivateKeyPath({stdin, stdout}) {
+    const prompt = createInterface({input: stdin, output: stdout});
+    try {
+        return await prompt.question(
+            'Private signing key path (must be outside this repository): ',
+        );
+    } finally {
+        prompt.close();
+    }
+}
+
+function resolvePrivateKeyPath({cwd, supplied, homeDirectory}) {
+    if (typeof supplied !== 'string' || supplied.trim() === '' ||
+        Buffer.byteLength(supplied) > MAX_PRIVATE_KEY_PATH_BYTES ||
+        /[\u0000-\u001f\u007f]/.test(supplied)) {
+        throw new Error('private signing key was not supplied');
+    }
+    const value = supplied.trim();
+    for (const prefix of HOME_PREFIXES) {
+        if (value.startsWith(prefix)) {
+            return path.resolve(homeDirectory, value.slice(prefix.length));
+        }
+    }
+    if (value.startsWith('~') || value.startsWith('$')) {
+        throw new Error('private signing key path uses unsupported expansion');
+    }
+    return path.resolve(cwd, value);
+}
+
+function encryptedPkcs8(bytes) {
+    return bytes.length >= ENCRYPTED_PKCS8_LABEL.length &&
+        bytes.subarray(0, ENCRYPTED_PKCS8_LABEL.length).equals(ENCRYPTED_PKCS8_LABEL);
+}
 
 async function readRegularFile(filePath, maximum = MAX_JSON_BYTES) {
     let stat;
@@ -52,33 +91,30 @@ async function atomicWrite(filePath, bytes, mode = 0o644) {
     await rename(temporary, filePath);
 }
 
-async function loadPrivateSigningKey({cwd, stdin, stdout}) {
+async function loadPrivateSigningKey({
+    cwd,
+    stdin,
+    stdout,
+    homeDirectory,
+    privateKeyPathPrompt,
+    passphrasePrompt,
+}) {
     if (!stdin?.isTTY || !stdout?.isTTY) {
         throw new Error('signing requires the human key custodian in an interactive terminal');
     }
-    const prompt = createInterface({input: stdin, output: stdout});
-    let supplied;
-    try {
-        supplied = await prompt.question('Private signing key path (must be outside this repository): ');
-    } finally {
-        prompt.close();
-    }
-    if (typeof supplied !== 'string' || supplied.trim() === '') {
-        throw new Error('private signing key was not supplied');
-    }
+    const supplied = await privateKeyPathPrompt({stdin, stdout});
     let repositoryRoot;
-    let keyPath;
     let stat;
     let bytes;
     try {
         repositoryRoot = await realpath(cwd);
-        const suppliedPath = path.resolve(cwd, supplied.trim());
+        const suppliedPath = resolvePrivateKeyPath({cwd, supplied, homeDirectory});
         stat = await lstat(suppliedPath);
         if (stat.isSymbolicLink() || !stat.isFile() || stat.size === 0 ||
             stat.size > MAX_PRIVATE_KEY_BYTES) {
             throw new Error('invalid-file');
         }
-        keyPath = await realpath(suppliedPath);
+        const keyPath = await realpath(suppliedPath);
         const relative = path.relative(repositoryRoot, keyPath);
         if (relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..')) {
             throw new Error('inside-repository');
@@ -87,13 +123,29 @@ async function loadPrivateSigningKey({cwd, stdin, stdout}) {
     } catch {
         throw new Error('private signing key is unavailable or inside the repository');
     }
+    let passphrase = null;
     let privateKey;
     try {
-        privateKey = createPrivateKey(bytes);
-    } catch {
-        throw new Error('private signing key is invalid');
+        if (encryptedPkcs8(bytes)) {
+            passphrase = await passphrasePrompt({
+                stdin,
+                stdout,
+                prompt: 'Private signing key passphrase: ',
+            });
+            if (!Buffer.isBuffer(passphrase) || passphrase.length === 0) {
+                throw new Error('private signing key is invalid');
+            }
+        }
+        try {
+            privateKey = passphrase === null
+                ? createPrivateKey(bytes)
+                : createPrivateKey({key: bytes, format: 'pem', passphrase});
+        } catch {
+            throw new Error('private signing key is invalid');
+        }
     } finally {
-        if (bytes) bytes.fill(0);
+        bytes.fill(0);
+        passphrase?.fill(0);
     }
     if (privateKey.asymmetricKeyType !== 'ed25519') {
         throw new Error('private signing key must use Ed25519');
@@ -108,6 +160,9 @@ export async function run(args, {
     now = new Date(),
     stdin = process.stdin,
     stdout = process.stdout,
+    homeDirectory = homedir(),
+    privateKeyPathPrompt = promptForPrivateKeyPath,
+    passphrasePrompt = readHiddenLine,
 } = {}) {
     if (!Array.isArray(args) || args.length !== 1 ||
         !['check-key', 'prepare', 'sign', 'verify'].includes(args[0])) {
@@ -175,7 +230,14 @@ export async function run(args, {
         throw new Error('prepared catalogue payload is invalid JSON');
     }
     validateCataloguePayload({value: payload, now});
-    const privateKey = await loadPrivateSigningKey({cwd, stdin, stdout});
+    const privateKey = await loadPrivateSigningKey({
+        cwd,
+        stdin,
+        stdout,
+        homeDirectory,
+        privateKeyPathPrompt,
+        passphrasePrompt,
+    });
     const envelopeBytes = createEnvelope({payload, privateKey, publicKey});
     await atomicWrite(cataloguePath, envelopeBytes);
     const verified = verifyEnvelope({bytes: envelopeBytes, publicKey, now});
