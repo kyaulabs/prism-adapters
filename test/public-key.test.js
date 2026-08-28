@@ -61,6 +61,17 @@ test('rejects a symlinked public key', async () => {
     );
 });
 
+test('rejects a public key larger than the configured boundary', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'prism-adapters-key-'));
+    const filePath = path.join(directory, 'public.pem');
+    await writeFile(filePath, Buffer.alloc(16_385, 7));
+
+    await assert.rejects(
+        loadTrustedPublicKey({filePath, expectedFingerprint: '0'.repeat(64)}),
+        /public key must be a regular non-symlink file/,
+    );
+});
+
 test('the committed production public key matches the Core trust root', async () => {
     const loaded = await loadTrustedPublicKey({
         filePath: new URL('../adapter-catalogue-public.pem', import.meta.url),

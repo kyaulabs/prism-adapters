@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import {createHash, generateKeyPairSync} from 'node:crypto';
-import {mkdtemp, mkdir, readFile, writeFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, symlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -270,6 +270,56 @@ test('rejects an encrypted private key that does not match the trusted public ke
         }),
         /private key does not match the trusted public key/,
     );
+});
+
+test('rejects an oversized prepared payload before requesting a key path', async () => {
+    const fixture = await repository();
+    await mkdir(path.join(fixture.cwd, '.publisher'));
+    await writeFile(
+        path.join(fixture.cwd, '.publisher', 'payload.json'),
+        Buffer.alloc(4 * 1024 * 1024 + 1, 7),
+    );
+    let pathRequested = false;
+
+    await assert.rejects(
+        run(['sign'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            stdin: {isTTY: true},
+            stdout: ttyOutput().stream,
+            privateKeyPathPrompt: async () => {
+                pathRequested = true;
+                return '~/private.pem';
+            },
+        }),
+        /publisher file must be a bounded regular non-symlink file/,
+    );
+    assert.equal(pathRequested, false);
+});
+
+test('rejects a symlinked prepared payload before requesting a key path', async () => {
+    const fixture = await repository();
+    await mkdir(path.join(fixture.cwd, '.publisher'));
+    const target = path.join(fixture.cwd, '.publisher', 'target.json');
+    const link = path.join(fixture.cwd, '.publisher', 'payload.json');
+    await writeFile(target, `${JSON.stringify(payload())}\n`);
+    await symlink(target, link);
+    let pathRequested = false;
+
+    await assert.rejects(
+        run(['sign'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            stdin: {isTTY: true},
+            stdout: ttyOutput().stream,
+            privateKeyPathPrompt: async () => {
+                pathRequested = true;
+                return '~/private.pem';
+            },
+        }),
+        /publisher file must be a bounded regular non-symlink file/,
+    );
+    assert.equal(pathRequested, false);
 });
 
 test('rejects unknown commands', async () => {

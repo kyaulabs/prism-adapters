@@ -4,7 +4,6 @@ import {createPrivateKey} from 'node:crypto';
 import {
     lstat,
     mkdir,
-    readFile,
     realpath,
     rename,
     writeFile,
@@ -20,6 +19,7 @@ import {
     EXPECTED_PUBLIC_KEY_SHA256,
     loadTrustedPublicKey,
 } from './public-key.js';
+import {readBoundedRegularFile} from './safe-file.js';
 import {readHiddenLine} from './secret-prompt.js';
 
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
@@ -63,26 +63,26 @@ function encryptedPkcs8(bytes) {
 }
 
 async function readRegularFile(filePath, maximum = MAX_JSON_BYTES) {
-    let stat;
     try {
-        stat = await lstat(filePath);
-    } catch {
-        throw new Error('required publisher file is unavailable');
-    }
-    if (stat.isSymbolicLink() || !stat.isFile() || stat.size === 0 || stat.size > maximum) {
+        return await readBoundedRegularFile({filePath, maximum});
+    } catch (error) {
+        if (error.cause?.code === 'ENOENT') {
+            throw new Error('required publisher file is unavailable');
+        }
         throw new Error('publisher file must be a bounded regular non-symlink file');
     }
-    return readFile(filePath);
 }
 
 async function readOptionalFile(filePath) {
     try {
-        await lstat(filePath);
+        return await readBoundedRegularFile({
+            filePath,
+            maximum: MAX_JSON_BYTES,
+        });
     } catch (error) {
-        if (error?.code === 'ENOENT') return null;
+        if (error.cause?.code === 'ENOENT') return null;
         throw new Error('optional publisher file cannot be inspected');
     }
-    return readRegularFile(filePath);
 }
 
 async function atomicWrite(filePath, bytes, mode = 0o644) {
@@ -119,7 +119,10 @@ async function loadPrivateSigningKey({
         if (relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..')) {
             throw new Error('inside-repository');
         }
-        bytes = await readFile(keyPath);
+        bytes = await readBoundedRegularFile({
+            filePath: suppliedPath,
+            maximum: MAX_PRIVATE_KEY_BYTES,
+        });
     } catch {
         throw new Error('private signing key is unavailable or inside the repository');
     }

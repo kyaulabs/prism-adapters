@@ -1,7 +1,8 @@
 // $KYAULabs: public-key.js kyau@aura.kyaulabs 2026/08/28 -0700 Exp $
 
 import {createHash, createPublicKey} from 'node:crypto';
-import {lstat, readFile} from 'node:fs/promises';
+
+import {readBoundedRegularFile} from './safe-file.js';
 
 export const CATALOGUE_ID = 'kyaulabs/prism-adapters';
 export const KEY_ID = 'kyaulabs-prism-adapters-2026-01';
@@ -18,15 +19,12 @@ export async function loadTrustedPublicKey({
     if (!SHA256.test(expectedFingerprint)) {
         throw new Error('trusted public key fingerprint is invalid');
     }
-    let stat;
     let bytes;
     try {
-        stat = await lstat(filePath);
-        if (stat.isSymbolicLink() || !stat.isFile() || stat.size === 0 ||
-            stat.size > MAX_PUBLIC_KEY_BYTES) {
-            throw new Error('invalid-file');
-        }
-        bytes = await readFile(filePath);
+        bytes = await readBoundedRegularFile({
+            filePath,
+            maximum: MAX_PUBLIC_KEY_BYTES,
+        });
     } catch {
         throw new Error('public key must be a regular non-symlink file');
     }
