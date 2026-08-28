@@ -1,0 +1,65 @@
+rules:
+  - id: prism-no-child-process
+    message: Publisher source must not execute subprocesses.
+    languages: [javascript]
+    severity: ERROR
+    paths:
+      include: [/src/**/*.js]
+    pattern-either:
+      - pattern: require('node:child_process')
+      - pattern: require('child_process')
+      - pattern-regex: '(?m)^\s*import\b[^\n]*["''](?:node:)?child_process["'']'
+
+  - id: prism-no-dynamic-execution
+    message: Publisher source must not evaluate dynamic code.
+    languages: [javascript]
+    severity: ERROR
+    paths:
+      include: [/src/**/*.js]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - pattern: import(...)
+
+  - id: prism-no-path-readfile
+    message: Trust-boundary reads must use the bounded descriptor reader.
+    languages: [javascript]
+    severity: ERROR
+    paths:
+      include: [/src/**/*.js]
+    pattern-either:
+      - pattern: readFile(...)
+      - pattern: readFileSync(...)
+      - pattern: $FS.readFile(...)
+      - pattern: $FS.readFileSync(...)
+
+  - id: prism-no-secret-output
+    message: Publisher source must not output private-key or passphrase values.
+    languages: [javascript]
+    severity: ERROR
+    paths:
+      include: [/src/**/*.js]
+    patterns:
+      - pattern-either:
+          - pattern: $OUT.write($VALUE)
+          - pattern: console.$METHOD($VALUE)
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: '(?i).*(passphrase|privateKey|keyPath|supplied).*'
+
+  - id: prism-no-process-env
+    message: Publisher source must not acquire authority from process.env.
+    languages: [javascript]
+    severity: ERROR
+    paths:
+      include: [/src/**/*.js]
+    pattern: process.env
+
+  - id: prism-no-direct-fetch
+    message: Registry access must use the injected fixed-origin fetch boundary.
+    languages: [javascript]
+    severity: ERROR
+    paths:
+      include: [/src/**/*.js]
+    pattern: fetch(...)
