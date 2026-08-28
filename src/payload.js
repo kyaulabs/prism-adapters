@@ -8,7 +8,7 @@ const SIX_DAYS = 6 * 24 * 60 * 60 * 1000;
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 const FIVE_MINUTES = 5 * 60 * 1000;
 const VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
-const CORE_RANGE = /^>=(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*) <(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
+const CORE_RANGE = /^>=(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*) <(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const ADAPTER_ID = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const PACKAGE_NAME = /^@kyaulabs\/[a-z0-9](?:[a-z0-9._-]{0,212}[a-z0-9])?$/;
 const INTEGRITY = /^sha512-[A-Za-z0-9+/]+={0,2}$/;
@@ -45,10 +45,22 @@ function timestamp(value) {
     return parsed;
 }
 
+function validCoreRange(value) {
+    const match = typeof value === 'string' ? CORE_RANGE.exec(value) : null;
+    if (match === null) return false;
+    const lower = match.slice(1, 4).map(Number);
+    const upper = match.slice(4, 7).map(Number);
+    for (let index = 0; index < lower.length; index += 1) {
+        if (lower[index] < upper[index]) return true;
+        if (lower[index] > upper[index]) return false;
+    }
+    return false;
+}
+
 function validateSourceRelease(value) {
     if (!exactKeys(value, [
         'version', 'coreRange', 'bootstrapProtocol', 'status',
-    ]) || !VERSION.test(value.version) || !CORE_RANGE.test(value.coreRange) ||
+    ]) || !VERSION.test(value.version) || !validCoreRange(value.coreRange) ||
         !Number.isSafeInteger(value.bootstrapProtocol) || value.bootstrapProtocol <= 0 ||
         !['ACTIVE', 'REVOKED'].includes(value.status)) {
         throw new Error('catalogue source is invalid');

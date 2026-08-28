@@ -81,6 +81,15 @@ test('hydrates a deterministic six-day catalogue from allowlisted npm metadata',
     });
 });
 
+for (const coreRange of ['>=1.0.0 <1.0.0', '>=2.0.0 <1.0.0']) {
+    test(`rejects impossible Core range ${coreRange}`, () => {
+        const value = structuredClone(sourceValue);
+        value.adapters[0].releases[0].coreRange = coreRange;
+
+        assert.throws(() => readCatalogueSource(value), /catalogue source is invalid/);
+    });
+}
+
 test('rejects unreviewed source fields', () => {
     assert.throws(
         () => readCatalogueSource({...sourceValue, registry: 'https://example.test'}),
