@@ -48,8 +48,8 @@ function timestamp(value) {
 function validCoreRange(value) {
     const match = typeof value === 'string' ? CORE_RANGE.exec(value) : null;
     if (match === null) return false;
-    const lower = match.slice(1, 4).map(Number);
-    const upper = match.slice(4, 7).map(Number);
+    const lower = match.slice(1, 4).map(BigInt);
+    const upper = match.slice(4, 7).map(BigInt);
     for (let index = 0; index < lower.length; index += 1) {
         if (lower[index] < upper[index]) return true;
         if (lower[index] > upper[index]) return false;
