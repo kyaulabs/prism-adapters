@@ -128,6 +128,7 @@ test('prepares sequence one without exposing signing-key authority', async () =>
     ));
     assert.equal(payload.sequence, 1);
     assert.match(stdout.value(), /prepared catalogue sequence 1/);
+    assert.match(stdout.value(), /digest [0-9a-f]{64}/);
 });
 
 test('sign rejects non-interactive execution before requesting a private key', async () => {
@@ -146,6 +147,27 @@ test('sign rejects non-interactive execution before requesting a private key', a
     );
 });
 
+test('rejects an unconfirmed payload digest before requesting a key path', async () => {
+    const fixture = await signingRepository();
+    let pathRequested = false;
+    await assert.rejects(
+        run(['sign'], {
+            cwd: fixture.cwd,
+            expectedFingerprint: fixture.key.fingerprint,
+            now: new Date('2026-08-28T00:00:00.000Z'),
+            stdin: {isTTY: true},
+            stdout: ttyOutput().stream,
+            payloadConfirmationPrompt: async () => false,
+            privateKeyPathPrompt: async () => {
+                pathRequested = true;
+                return '~/private.pem';
+            },
+        }),
+        /prepared payload digest was not confirmed/,
+    );
+    assert.equal(pathRequested, false);
+});
+
 test('signs with an encrypted PKCS8 key resolved from a tilde path', async () => {
     const fixture = await signingRepository();
     const stdout = ttyOutput();
@@ -156,6 +178,7 @@ test('signs with an encrypted PKCS8 key resolved from a tilde path', async () =>
         now: new Date('2026-08-28T00:00:00.000Z'),
         stdin: {isTTY: true},
         stdout: stdout.stream,
+        payloadConfirmationPrompt: async () => true,
         privateKeyPathPrompt: async () => '~/private.pem',
         passphrasePrompt: async () => Buffer.from(signingPassphrase),
     });
@@ -180,6 +203,7 @@ for (const supplied of ['$HOME/private.pem', '${HOME}/private.pem']) {
             now: new Date('2026-08-28T00:00:00.000Z'),
             stdin: {isTTY: true},
             stdout: ttyOutput().stream,
+            payloadConfirmationPrompt: async () => true,
             privateKeyPathPrompt: async () => supplied,
             passphrasePrompt: async () => Buffer.from(signingPassphrase),
         });
@@ -203,6 +227,7 @@ test('does not evaluate arbitrary environment-style path prefixes', async () => 
             now: new Date('2026-08-28T00:00:00.000Z'),
             stdin: {isTTY: true},
             stdout: ttyOutput().stream,
+            payloadConfirmationPrompt: async () => true,
             privateKeyPathPrompt: async () => '$USER/private.pem',
             passphrasePrompt: async () => {
                 passphraseRequested = true;
@@ -224,6 +249,7 @@ test('rejects an incorrect encrypted-key passphrase without publication', async 
             now: new Date('2026-08-28T00:00:00.000Z'),
             stdin: {isTTY: true},
             stdout: ttyOutput().stream,
+            payloadConfirmationPrompt: async () => true,
             privateKeyPathPrompt: async () => '~/private.pem',
             passphrasePrompt: async () => Buffer.from('incorrect synthetic passphrase'),
         }),
@@ -245,6 +271,7 @@ test('keeps unencrypted PKCS8 support without requesting a passphrase', async ()
         now: new Date('2026-08-28T00:00:00.000Z'),
         stdin: {isTTY: true},
         stdout: ttyOutput().stream,
+        payloadConfirmationPrompt: async () => true,
         privateKeyPathPrompt: async () => '~/private.pem',
         passphrasePrompt: async () => {
             passphraseRequested = true;
@@ -265,6 +292,7 @@ test('rejects an encrypted private key that does not match the trusted public ke
             now: new Date('2026-08-28T00:00:00.000Z'),
             stdin: {isTTY: true},
             stdout: ttyOutput().stream,
+            payloadConfirmationPrompt: async () => true,
             privateKeyPathPrompt: async () => '~/private.pem',
             passphrasePrompt: async () => Buffer.from(signingPassphrase),
         }),

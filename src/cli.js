@@ -1,6 +1,6 @@
 // $KYAULabs: cli.js kyau@aura.kyaulabs 2026/08/28 -0700 Exp $
 
-import {createPrivateKey} from 'node:crypto';
+import {createHash, createPrivateKey} from 'node:crypto';
 import {
     lstat,
     mkdir,
@@ -27,6 +27,18 @@ const MAX_PRIVATE_KEY_BYTES = 65_536;
 const ENCRYPTED_PKCS8_LABEL = Buffer.from('-----BEGIN ENCRYPTED PRIVATE KEY-----');
 const HOME_PREFIXES = ['${HOME}/', '$HOME/', '~/'];
 const MAX_PRIVATE_KEY_PATH_BYTES = 4096;
+
+async function confirmPayloadDigest({stdin, stdout, digest}) {
+    const prompt = createInterface({input: stdin, output: stdout});
+    try {
+        const answer = await prompt.question(
+            `Confirm prepared payload digest ${digest} matches prepare output (yes/no): `,
+        );
+        return answer.trim() === 'yes';
+    } finally {
+        prompt.close();
+    }
+}
 
 async function promptForPrivateKeyPath({stdin, stdout}) {
     const prompt = createInterface({input: stdin, output: stdout});
@@ -188,6 +200,7 @@ export async function run(args, {
     homeDirectory = homedir(),
     privateKeyPathPrompt = promptForPrivateKeyPath,
     passphrasePrompt = readHiddenLine,
+    payloadConfirmationPrompt = confirmPayloadDigest,
 } = {}) {
     if (!Array.isArray(args) || args.length !== 1 ||
         !['check-key', 'prepare', 'sign', 'verify'].includes(args[0])) {
@@ -238,9 +251,12 @@ export async function run(args, {
             now,
             fetchImpl,
         });
-        await atomicWrite(payloadPath, Buffer.from(`${JSON.stringify(payload)}\n`), 0o600);
+        const payloadBytes = Buffer.from(`${JSON.stringify(payload)}\n`);
+        await atomicWrite(payloadPath, payloadBytes, 0o600);
+        const digest = createHash('sha256').update(payloadBytes).digest('hex');
         stdout.write(
-            `prepared catalogue sequence ${payload.sequence} expires ${payload.expiresAt}\n`,
+            `prepared catalogue sequence ${payload.sequence} digest ${digest} ` +
+            `expires ${payload.expiresAt}\n`,
         );
         return;
     }
@@ -256,6 +272,12 @@ export async function run(args, {
         throw new Error('prepared catalogue payload is invalid JSON');
     }
     validateCataloguePayload({value: payload, now});
+    const digest = createHash('sha256').update(payloadBytes).digest('hex');
+    stdout.write(`prepared payload digest ${digest}\n`);
+    const confirmed = await payloadConfirmationPrompt({stdin, stdout, digest});
+    if (confirmed !== true) {
+        throw new Error('prepared payload digest was not confirmed');
+    }
     const privateKey = await loadPrivateSigningKey({
         cwd,
         stdin,
