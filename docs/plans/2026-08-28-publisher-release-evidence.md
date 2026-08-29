@@ -337,7 +337,7 @@ prism-tool commit create --type fix --scope evidence --subject "verify immutable
 - `run(args, dependencies)` gains `githubFetchImpl`, `npmFetchImpl`, and `sleepImpl`; defaults remain built-in fetch and timer promises.
 - Both preparation commands require and verify the existing `catalogue.json` with `allowExpired: true`, derive `sequence + 1`, render `catalogue-source.json`, and write `.publisher/payload.json` only after all evidence succeeds.
 
-- [ ] **Step 1: Replace the old prepare test with failing release and renewal integration tests**
+- [x] **Step 1: Replace the old prepare test with failing release and renewal integration tests**
 
 Extend the existing temporary repository and synthetic-key helpers as `evidenceRepository()`. It returns `{cwd, key, mergeCommit, githubFetchImpl, npmFetchImpl, network}` and exposes `dependencies({githubFault, npmFault})` for Task 5. The release test must call:
 
@@ -364,13 +364,13 @@ The renewal test calls `run(['prepare-renewal'], ...)`, supplies no GitHub fake,
 
 Add failure assertions proving malformed CLI args fail before network access and any GitHub/npm error leaves both `catalogue-source.json` and `.publisher/payload.json` absent in the temporary repository.
 
-- [ ] **Step 2: Run the focused CLI tests to verify Red**
+- [x] **Step 2: Run the focused CLI tests to verify Red**
 
 Run: `node --test --test-name-pattern="prepare-release|prepare-renewal|evidence failure" test/cli.test.js`
 
 Expected: FAIL because the commands are unknown and the old `prepare` path still reads local source.
 
-- [ ] **Step 3: Compose verified evidence in the CLI**
+- [x] **Step 3: Compose verified evidence in the CLI**
 
 Replace the old `prepare` branch with these flows:
 
@@ -406,7 +406,7 @@ Update package scripts to:
 
 Remove `catalogue:prepare`. Do not change `package-lock.json`; npm lockfiles do not record script-only manifest changes, and no dependency changes are permitted.
 
-- [ ] **Step 4: Run CLI and full tests**
+- [x] **Step 4: Run CLI and full tests**
 
 Run: `node --test test/cli.test.js`
 
@@ -416,7 +416,7 @@ Run: `npm test`
 
 Expected: PASS for the complete suite.
 
-- [ ] **Step 5: Create the commit**
+- [x] **Step 5: Create the commit**
 
 ```bash
 git add src/cli.js test/cli.test.js package.json

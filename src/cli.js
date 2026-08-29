@@ -13,10 +13,18 @@ import {
 import {homedir} from 'node:os';
 import path from 'node:path';
 import {createInterface} from 'node:readline/promises';
+import {setTimeout as sleep} from 'node:timers/promises';
 import {pathToFileURL} from 'node:url';
 
+import {
+    applyReleaseEvidence,
+    renderCatalogueSource,
+    sourceFromVerifiedCatalogue,
+} from './catalogue-source.js';
 import {createEnvelope, verifyEnvelope} from './envelope.js';
-import {hydrateCatalogue, readCatalogueSource, validateCataloguePayload} from './payload.js';
+import {resolvePrismReleaseEvidence} from './github-evidence.js';
+import {resolveNpmReleaseEvidence} from './npm-evidence.js';
+import {hydrateCatalogue, validateCataloguePayload} from './payload.js';
 import {
     EXPECTED_PUBLIC_KEY_SHA256,
     loadTrustedPublicKey,
@@ -87,18 +95,6 @@ async function readRegularFile(filePath, maximum = MAX_JSON_BYTES) {
     }
 }
 
-async function readOptionalFile(filePath) {
-    try {
-        return await readBoundedRegularFile({
-            filePath,
-            maximum: MAX_JSON_BYTES,
-        });
-    } catch (error) {
-        if (error.cause?.code === 'ENOENT') return null;
-        throw new Error('optional publisher file cannot be inspected');
-    }
-}
-
 async function openPrivateWorkDirectory({workDirectory, create}) {
     let handle;
     try {
@@ -138,6 +134,23 @@ async function atomicWrite(filePath, bytes, mode = 0o644) {
     const temporary = `${filePath}.new`;
     await writeFile(temporary, bytes, {mode, flag: 'wx'});
     await rename(temporary, filePath);
+}
+
+async function persistPreparation({cwd, workDirectory, source, payload}) {
+    const sourceBytes = Buffer.from(renderCatalogueSource(source), 'utf8');
+    const payloadBytes = Buffer.from(`${JSON.stringify(payload)}\n`, 'utf8');
+    const work = await openPrivateWorkDirectory({workDirectory, create: true});
+    try {
+        await atomicWrite(path.join(cwd, 'catalogue-source.json'), sourceBytes);
+        await atomicWrite(
+            path.join(work.descriptorPath, 'payload.json'),
+            payloadBytes,
+            0o600,
+        );
+    } finally {
+        await work.handle.close();
+    }
+    return createHash('sha256').update(payloadBytes).digest('hex');
 }
 
 async function loadPrivateSigningKey({
@@ -208,7 +221,9 @@ async function loadPrivateSigningKey({
 export async function run(args, {
     cwd = process.cwd(),
     expectedFingerprint = EXPECTED_PUBLIC_KEY_SHA256,
-    fetchImpl = globalThis.fetch,
+    githubFetchImpl = globalThis.fetch,
+    npmFetchImpl = globalThis.fetch,
+    sleepImpl = sleep,
     now = new Date(),
     stdin = process.stdin,
     stdout = process.stdout,
@@ -217,9 +232,14 @@ export async function run(args, {
     passphrasePrompt = readHiddenLine,
     payloadConfirmationPrompt = confirmPayloadDigest,
 } = {}) {
-    if (!Array.isArray(args) || args.length !== 1 ||
-        !['check-key', 'prepare', 'sign', 'verify'].includes(args[0])) {
-        throw new Error('unknown command; use check-key, prepare, sign, or verify');
+    const simpleCommand = Array.isArray(args) && args.length === 1 &&
+        ['check-key', 'prepare-renewal', 'sign', 'verify'].includes(args[0]);
+    const releaseCommand = Array.isArray(args) && args.length === 3 &&
+        args[0] === 'prepare-release';
+    if (!simpleCommand && !releaseCommand) {
+        throw new Error(
+            'unknown command; use check-key, prepare-release, prepare-renewal, sign, or verify',
+        );
     }
     const publicKeyPath = path.join(cwd, 'adapter-catalogue-public.pem');
     const publicKey = await loadTrustedPublicKey({
@@ -242,43 +262,73 @@ export async function run(args, {
         return;
     }
     const workDirectory = path.join(cwd, '.publisher');
-    if (command === 'prepare') {
-        const sourceBytes = await readRegularFile(path.join(cwd, 'catalogue-source.json'));
-        let sourceValue;
-        try {
-            sourceValue = JSON.parse(sourceBytes.toString('utf8'));
-        } catch {
-            throw new Error('catalogue source is invalid JSON');
-        }
-        const source = readCatalogueSource(sourceValue);
-        const existing = await readOptionalFile(cataloguePath);
-        const sequence = existing === null ? 1 : verifyEnvelope({
-            bytes: existing,
+    if (command === 'prepare-renewal') {
+        const existingBytes = await readRegularFile(cataloguePath);
+        const verified = verifyEnvelope({
+            bytes: existingBytes,
             publicKey,
             now,
             allowExpired: true,
-        }).catalogue.sequence + 1;
+        });
+        const source = sourceFromVerifiedCatalogue(verified.catalogue);
         const payload = await hydrateCatalogue({
             source,
-            sequence,
+            sequence: verified.catalogue.sequence + 1,
             now,
-            fetchImpl,
+            npmEvidence: (request) => resolveNpmReleaseEvidence({
+                ...request,
+                fetchImpl: npmFetchImpl,
+                sleepImpl,
+            }),
         });
-        const payloadBytes = Buffer.from(`${JSON.stringify(payload)}\n`);
-        const work = await openPrivateWorkDirectory({workDirectory, create: true});
-        try {
-            await atomicWrite(
-                path.join(work.descriptorPath, 'payload.json'),
-                payloadBytes,
-                0o600,
-            );
-        } finally {
-            await work.handle.close();
-        }
-        const digest = createHash('sha256').update(payloadBytes).digest('hex');
+        const digest = await persistPreparation({
+            cwd,
+            workDirectory,
+            source,
+            payload,
+        });
         stdout.write(
-            `prepared catalogue sequence ${payload.sequence} digest ${digest} ` +
+            `prepared renewal catalogue sequence ${payload.sequence} digest ${digest} ` +
             `expires ${payload.expiresAt}\n`,
+        );
+        return;
+    }
+    if (command === 'prepare-release') {
+        const existingBytes = await readRegularFile(cataloguePath);
+        const verified = verifyEnvelope({
+            bytes: existingBytes,
+            publicKey,
+            now,
+            allowExpired: true,
+        });
+        const evidence = await resolvePrismReleaseEvidence({
+            version: args[1],
+            mergeCommit: args[2],
+            fetchImpl: githubFetchImpl,
+        });
+        const source = applyReleaseEvidence({
+            current: verified.catalogue,
+            evidence,
+        });
+        const payload = await hydrateCatalogue({
+            source,
+            sequence: verified.catalogue.sequence + 1,
+            now,
+            npmEvidence: (request) => resolveNpmReleaseEvidence({
+                ...request,
+                fetchImpl: npmFetchImpl,
+                sleepImpl,
+            }),
+        });
+        const digest = await persistPreparation({
+            cwd,
+            workDirectory,
+            source,
+            payload,
+        });
+        stdout.write(
+            `prepared release ${evidence.version} catalogue sequence ${payload.sequence} ` +
+            `digest ${digest} expires ${payload.expiresAt}\n`,
         );
         return;
     }

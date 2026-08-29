@@ -11,7 +11,8 @@
   "scripts": {
     "test": "node --test",
     "catalogue:check-key": "node src/cli.js check-key",
-    "catalogue:prepare": "node src/cli.js prepare",
+    "catalogue:prepare-release": "node src/cli.js prepare-release",
+    "catalogue:prepare-renewal": "node src/cli.js prepare-renewal",
     "catalogue:sign": "node src/cli.js sign",
     "catalogue:verify": "node src/cli.js verify"
   }
