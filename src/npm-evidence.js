@@ -15,6 +15,7 @@ const RETRY_DELAY_MS = 1000;
 const VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
 const PACKAGE_NAME = /^@kyaulabs\/[a-z0-9](?:[a-z0-9._-]{0,212}[a-z0-9])?$/;
 const INTEGRITY = /^sha512-[A-Za-z0-9+/]+={0,2}$/;
+const UTC_TIMESTAMP = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/;
 
 function invalid() {
     return new EvidenceInvalidError('npm release evidence is invalid');
@@ -33,7 +34,8 @@ function normalizeEvidence(packument, version) {
     const rawPublishedAt = packument?.time?.[version];
     const publishedAt = new Date(rawPublishedAt);
     if (!canonicalIntegrity(integrity) || typeof rawPublishedAt !== 'string' ||
-        !Number.isFinite(publishedAt.getTime())) {
+        !UTC_TIMESTAMP.test(rawPublishedAt) || !Number.isFinite(publishedAt.getTime()) ||
+        publishedAt.toISOString() !== rawPublishedAt) {
         throw invalid();
     }
     return Object.freeze({

@@ -84,6 +84,25 @@ test('does not retry malformed exact npm evidence', async () => {
     }
 });
 
+test('rejects parseable but noncanonical npm publication times', async () => {
+    for (const publishedAt of [
+        '2026-08-28',
+        '2026-08-28T14:00:00+02:00',
+    ]) {
+        await assert.rejects(resolveNpmReleaseEvidence({
+            packageName: '@kyaulabs/prism-php-web',
+            version: '0.4.2',
+            fetchImpl: async () => new Response(JSON.stringify({
+                versions: {'0.4.2': {dist: {integrity}}},
+                time: {'0.4.2': publishedAt},
+            }), {status: 200}),
+            sleepImpl: async () => {
+                throw new Error('invalid evidence must not sleep');
+            },
+        }), /npm release evidence is invalid/);
+    }
+});
+
 test('does not retry redirected or oversized npm responses', async () => {
     const responses = [
         new Response('', {status: 302, headers: {location: 'https://other.test/'}}),
