@@ -29,7 +29,7 @@ function trustedRunner(env) {
 
 export async function runProtectedSigning({
     cwd = process.cwd(),
-    env = process.env,
+    env = process.env, // nosemgrep: prism-no-process-env -- GitHub Actions provenance is the protected runner boundary accepted in ADR-0094
     stdout = process.stdout,
     signImpl = signProtectedCatalogue,
 } = {}) {
