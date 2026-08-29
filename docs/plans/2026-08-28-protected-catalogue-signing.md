@@ -577,7 +577,7 @@ prism-tool commit create --type fix --scope signing --subject "isolate protected
 - Consumes: GitHub runner provenance variables, fixed workspace paths, and `signProtectedCatalogue`.
 - Produces: `runProtectedSigning({cwd, env, stdout, signImpl})`; package command `npm run catalogue:sign-protected` takes no arguments.
 
-- [ ] **Step 1: Write runner provenance and cleanup tests**
+- [x] **Step 1: Write runner provenance and cleanup tests**
 
 Create `test/protected-runner.test.js`. Use temporary workspace and runner directories, create only synthetic secret files at `RUNNER_TEMP/prism-catalogue-signing/private.pem` and `passphrase`, and test:
 
@@ -686,13 +686,13 @@ for (const [name, change] of [
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
 ```
 
-- [ ] **Step 2: Run the runner tests to verify Red**
+- [x] **Step 2: Run the runner tests to verify Red**
 
 Run: `node --test test/protected-runner.test.js`
 
 Expected: FAIL because `src/protected-runner.js` does not exist.
 
-- [ ] **Step 3: Implement the no-argument protected runner**
+- [x] **Step 3: Implement the no-argument protected runner**
 
 Create `src/protected-runner.js`:
 
@@ -774,13 +774,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
 ```
 
-- [ ] **Step 4: Run runner tests to verify Green**
+- [x] **Step 4: Run runner tests to verify Green**
 
 Run: `node --test test/protected-runner.test.js`
 
 Expected: PASS; every case removes both synthetic secret files.
 
-- [ ] **Step 5: Retire the local production-signing command**
+- [x] **Step 5: Retire the local production-signing command**
 
 In `package.json`, replace:
 
@@ -811,7 +811,7 @@ test('rejects local production signing', async () => {
 
 Delete `test/secret-prompt.test.js` and remove imports/constants/helpers used only by the retired interactive signing tests: `chmod`, `symlink` only if otherwise unused, `signingPassphrase`, `signingRepository`, and `ttyOutput`.
 
-- [ ] **Step 6: Run CLI, runner, and full tests**
+- [x] **Step 6: Run CLI, runner, and full tests**
 
 Run: `node --test test/cli.test.js test/protected-runner.test.js`
 
@@ -821,7 +821,7 @@ Run: `npm test`
 
 Expected: PASS with no reference to `src/secret-prompt.js` or `catalogue:sign`.
 
-- [ ] **Step 7: Create the commit**
+- [x] **Step 7: Create the commit**
 
 Run `git add package.json src/cli.js src/protected-runner.js src/secret-prompt.js test/cli.test.js test/protected-runner.test.js test/secret-prompt.test.js`, then load `conventional-commits` and run this as the sole command in its assistant batch:
 
