@@ -18,6 +18,7 @@ private signing key.
 - npm
 - the committed `adapter-catalogue-public.pem`
 - a dedicated Ed25519 private signing key held outside every repository
+- permission to read Prism evidence from the public GitHub API
 - permission to read the public npm registry during preparation
 - permission to push the signed publication branch as a human
 
@@ -27,25 +28,48 @@ The trusted public-key fingerprint is:
 74679d283825c4e6048efdfd1c96cdcd688ce5e12915fcc13a8547c3443c1e34
 ```
 
-## Prepare a publication
+## Prepare a release update
 
-Review `catalogue-source.json`, then run:
+Use the stable Prism version and immutable merge commit from the release trigger:
 
 ```bash
 npm test
 npm run catalogue:check-key
-npm run catalogue:prepare
+npm run catalogue:prepare-release -- <stable-version> <immutable-commit>
 ```
 
-Preparation reads only the fixed npm registry origin. It validates the exact
-reviewed package version, canonical SHA-512 integrity, and publication time,
-then writes `.publisher/payload.json`. It does not request or use signing-key
-material.
+These two values are trigger hints, not catalogue authority. The publisher reads
+only `https://api.github.com/repos/kyaulabs/prism` and independently verifies the
+stable Release, direct release tag, merge commit, package tag, closed release
+declaration, and release-managed package manifest. It then reads exact package
+metadata only from `https://registry.npmjs.org`.
 
-Every preparation increments the existing verified catalogue sequence. The
-first publication uses sequence 1. A payload expires six days after issuance.
-Prepare and publish a replacement before expiry even when adapter releases have
-not changed.
+Preparation starts from the signature-verified current catalogue, preserves its
+unrelated releases and statuses, and adds or replaces only the exact validated
+release. It revalidates every exact npm release before generating
+`catalogue-source.json` and `.publisher/payload.json`. The generated source is a
+review artifact, not hand-authored compatibility or package authority.
+
+npm availability receives at most three attempts with fixed one-second delays
+and a 10-second timeout per attempt, bounding preparation to 32 seconds. A
+redirect, oversized response, prerelease, mutable ref, unknown field, mismatch,
+or exhausted retry writes no prepared payload and performs no signing or Git
+mutation.
+
+## Prepare a renewal
+
+Renewal preserves the complete verified release set and refreshes only exact npm
+evidence and the six-day validity window:
+
+```bash
+npm test
+npm run catalogue:check-key
+npm run catalogue:prepare-renewal
+```
+
+Both preparation modes require an existing verified catalogue and derive exactly
+its next sequence. Expiry is tolerated only for sequence recovery. Neither mode
+requests or uses signing-key material.
 
 ## Sign as the human key custodian
 
@@ -98,10 +122,15 @@ new project and confirm adapter discovery reports `CATALOGUE_VALID`.
 
 ## Release changes and revocations
 
-Edit only `catalogue-source.json`. Every release must name an exact stable npm
-version, Core compatibility range, bootstrap protocol, and `ACTIVE` or
-`REVOKED` status. Never use an npm dist-tag such as `latest`. Re-run the complete
-prepare, human sign, verify, review, and publish sequence for every change.
+Do not edit generated `catalogue-source.json` as authority. Adapter identity,
+Core compatibility, bootstrap protocol, and `ACTIVE` or `REVOKED` status come
+from the closed adapter release declaration at the immutable Prism release
+commit. Package identity and version come from its validated manifest; integrity
+and publication time come from exact npm metadata. The publisher never uses an
+npm dist-tag such as `latest`.
+
+Re-run the complete evidence preparation, human sign, verify, review, and publish
+sequence for every release update or renewal.
 
 Key rotation requires a Prism Core release that trusts the replacement public
 key before this publisher signs with the replacement private key.
