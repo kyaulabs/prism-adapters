@@ -3,9 +3,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import {readCatalogueSource} from '../src/catalogue-source.js';
 import {
     hydrateCatalogue,
-    readCatalogueSource,
     validateCataloguePayload,
 } from '../src/payload.js';
 
@@ -79,30 +79,6 @@ test('hydrates a deterministic six-day catalogue from allowlisted npm metadata',
             }],
         }],
     });
-});
-
-test('accepts exact Core range ordering beyond Number precision', () => {
-    const value = structuredClone(sourceValue);
-    value.adapters[0].releases[0].coreRange =
-        '>=9007199254740992.0.0 <9007199254740993.0.0';
-
-    assert.doesNotThrow(() => readCatalogueSource(value));
-});
-
-for (const coreRange of ['>=1.0.0 <1.0.0', '>=2.0.0 <1.0.0']) {
-    test(`rejects impossible Core range ${coreRange}`, () => {
-        const value = structuredClone(sourceValue);
-        value.adapters[0].releases[0].coreRange = coreRange;
-
-        assert.throws(() => readCatalogueSource(value), /catalogue source is invalid/);
-    });
-}
-
-test('rejects unreviewed source fields', () => {
-    assert.throws(
-        () => readCatalogueSource({...sourceValue, registry: 'https://example.test'}),
-        /catalogue source is invalid/,
-    );
 });
 
 test('rejects missing npm integrity', async () => {
