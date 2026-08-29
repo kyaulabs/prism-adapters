@@ -1,7 +1,25 @@
-name: Catalogue signing readiness
+name: Catalogue publication
 
 on:
+  repository_dispatch:
+    types: [prism-release-published]
+  schedule:
+    - cron: '0 6 */3 * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options:
+          - renewal
+          - release
+        default: renewal
+        required: true
+      version:
+        type: string
+        required: false
+      merge_commit:
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -30,13 +48,17 @@ jobs:
         run: npm ci
       - name: Run synthetic-key tests
         run: npm test
+      - name: Validate trigger and public evidence
+        run: npm run catalogue:prepare-trigger
 
   protected-signing:
     needs: synthetic-validation
     if: >-
       github.repository == 'kyaulabs/prism-adapters' &&
       github.ref == 'refs/heads/main' &&
-      github.event_name == 'workflow_dispatch' &&
+      (github.event_name == 'repository_dispatch' ||
+       github.event_name == 'schedule' ||
+       github.event_name == 'workflow_dispatch') &&
       vars.CATALOGUE_SIGNING_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -63,8 +85,8 @@ jobs:
         run: npm ci
       - name: Re-run synthetic-key tests
         run: npm test
-      - name: Prepare renewal from verified public evidence
-        run: npm run catalogue:prepare-renewal
+      - name: Recompute trigger and public evidence
+        run: npm run catalogue:prepare-trigger
       - name: Sign and reverify in protected environment
         shell: bash
         env:
@@ -82,9 +104,25 @@ jobs:
           unset ENCRYPTED_PRIVATE_KEY PRIVATE_KEY_PASSPHRASE
           npm run catalogue:sign-protected
           npm run catalogue:verify
-      - name: Remove protected signing state
+      - name: Publish immutable sequence branch and pull request
+        shell: bash
+        env:
+          APP_ID: ${{ vars.CATALOGUE_PUBLICATION_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.CATALOGUE_PUBLICATION_APP_PRIVATE_KEY }}
+        run: |
+          set +x
+          umask 077
+          app_directory="${RUNNER_TEMP}/prism-catalogue-publication"
+          trap 'rm -rf -- "$app_directory"' EXIT HUP INT TERM
+          rm -rf -- "$app_directory"
+          mkdir --mode=700 -- "$app_directory"
+          printf '%s' "$APP_PRIVATE_KEY" > "$app_directory/app.pem"
+          unset APP_PRIVATE_KEY
+          npm run catalogue:publish-protected
+      - name: Remove protected publication state
         if: always()
         shell: bash
         run: |
           set +x
+          rm -rf -- "${RUNNER_TEMP}/prism-catalogue-publication"
           rm -rf -- "${RUNNER_TEMP}/prism-catalogue-signing"

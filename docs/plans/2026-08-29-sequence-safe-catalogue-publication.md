@@ -521,7 +521,7 @@ prism-tool commit create --type fix --scope publication --subject "publish prote
 - Consumes: `repository_dispatch` action `prism-release-published`; cron renewal; manual `renewal|release` recovery inputs; environment secrets `CATALOGUE_SIGNING_PRIVATE_KEY`, `CATALOGUE_SIGNING_PASSPHRASE`, and `CATALOGUE_PUBLICATION_APP_PRIVATE_KEY`; variables `CATALOGUE_SIGNING_ENABLED` and `CATALOGUE_PUBLICATION_APP_ID`.
 - Produces: one serialized prepare → sign → verify → publish transaction.
 
-- [ ] **Step 1: Replace readiness-only drift tests with failing transaction guards**
+- [x] **Step 1: Replace readiness-only drift tests with failing transaction guards**
 
 Update `test/workflow.test.js` to require:
 
@@ -542,13 +542,13 @@ Keep top-level and job `GITHUB_TOKEN` permissions at `contents: read`. Require n
 
 Forbid `git push`, `gh pr`, update-ref, force, merge, auto-merge, PR close, `GITHUB_OUTPUT`, `GITHUB_STEP_SUMMARY`, artifacts, and caches. Permit publication only through `npm run catalogue:publish-protected`.
 
-- [ ] **Step 2: Run workflow tests to verify Red**
+- [x] **Step 2: Run workflow tests to verify Red**
 
 Run: `node --test test/workflow.test.js`
 
 Expected: FAIL because the workflow is manual/readiness-only and has no publication step.
 
-- [ ] **Step 3: Implement the three-trigger protected workflow**
+- [x] **Step 3: Implement the three-trigger protected workflow**
 
 Modify `.github/workflows/catalogue-signing.yml` so both jobs retain ten-minute bounds and exact trusted-SHA checkout. The unprivileged job runs tests and `npm run catalogue:prepare-trigger`. The protected job remains activation-, repository-, `main`-, event-, and environment-gated; it reruns tests and preparation from current authority.
 
@@ -590,7 +590,7 @@ Keep signing and App credentials in separate steps:
 
 Add independent `if: always()` cleanup for both private directories. Do not upload source/envelope artifacts; the publication client sends only the intended public bytes to the sequence commit.
 
-- [ ] **Step 4: Run workflow and full tests**
+- [x] **Step 4: Run workflow and full tests**
 
 Run: `node --test test/workflow.test.js`
 
@@ -608,7 +608,7 @@ node --input-type=module -e "import{readFileSync}from'node:fs';const s=readFileS
 
 Expected: `GREEN: sequence-safe publication path exists`.
 
-- [ ] **Step 5: Create the commit**
+- [x] **Step 5: Create the commit**
 
 Run `git add .github/workflows/catalogue-signing.yml test/workflow.test.js`, then load `conventional-commits` and run as the sole command in its assistant batch:
 
