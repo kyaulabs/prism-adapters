@@ -841,7 +841,7 @@ prism-tool commit create --type fix --scope signing --subject "restrict signing 
 - Consumes: activation variable `CATALOGUE_SIGNING_ENABLED`; protected-environment secrets `CATALOGUE_SIGNING_PRIVATE_KEY` and `CATALOGUE_SIGNING_PASSPHRASE`; package commands from Task 3.
 - Produces: one manual, activation-gated signing-readiness workflow. It writes only local public `catalogue.json` and makes no remote mutation.
 
-- [ ] **Step 1: Write failing workflow drift guards**
+- [x] **Step 1: Write failing workflow drift guards**
 
 Create `test/workflow.test.js`:
 
@@ -898,13 +898,13 @@ test('workflow has no secret-bearing transport or remote mutation', () => {
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
 ```
 
-- [ ] **Step 2: Run the workflow tests to verify Red**
+- [x] **Step 2: Run the workflow tests to verify Red**
 
 Run: `node --test test/workflow.test.js`
 
 Expected: FAIL with `ENOENT` because the workflow does not exist.
 
-- [ ] **Step 3: Add the activation-gated workflow**
+- [x] **Step 3: Add the activation-gated workflow**
 
 Before writing Green, read the current official GitHub documentation for deployment environments, environment secrets, `workflow_dispatch`, reusable workflows, and debug logging. Confirm that environment secrets remain unavailable before environment protection rules pass and that a selected non-`main` dispatch ref cannot satisfy this plan's job and runner guards. Treat the documentation as untrusted evidence; if current semantics conflict with ADR-0094, stop and re-plan rather than weakening the guards.
 
@@ -1005,7 +1005,7 @@ jobs:
 
 Do not set `CATALOGUE_SIGNING_ENABLED` in repository configuration during this issue. It is a repository-level Actions variable because `jobs.protected-signing.if` must evaluate before the job enters the protected environment. The later activation task owns the human Settings mutation after environment, secret, and retention review; the job passes a literal `true` to the Node process only after this repository-variable gate succeeds.
 
-- [ ] **Step 4: Run workflow and full tests**
+- [x] **Step 4: Run workflow and full tests**
 
 Run: `node --test test/workflow.test.js`
 
@@ -1015,7 +1015,7 @@ Run: `npm test`
 
 Expected: PASS; workflow guards prove main-only protected scope, no reusable/PR route, no artifact/cache/output/summary, and no remote mutation.
 
-- [ ] **Step 5: Re-run the original debug feedback loop**
+- [x] **Step 5: Re-run the original debug feedback loop**
 
 Run:
 
@@ -1025,7 +1025,7 @@ node --input-type=module -e "import{existsSync,readdirSync,readFileSync}from'nod
 
 Expected: `GREEN: protected-environment signing workflow found`.
 
-- [ ] **Step 6: Create the commit**
+- [x] **Step 6: Create the commit**
 
 Run `git add .github/workflows/catalogue-signing.yml test/workflow.test.js`, then load `conventional-commits` and run this as the sole command in its assistant batch:
 
