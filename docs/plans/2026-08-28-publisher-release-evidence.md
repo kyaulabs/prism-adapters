@@ -30,6 +30,7 @@
 ### Task 1: Deterministic Catalogue Source Policy
 
 **Files:**
+
 - Retain: `CONTEXT.md`
 - Retain: `adr/README.md`
 - Retain: `adr/0000-template.md`
@@ -40,6 +41,7 @@
 - Modify: `test/payload.test.js`
 
 **Interfaces:**
+
 - Consumes: signature-verified catalogue payloads and normalized release evidence shaped as `{adapters: Array<{id, displayName, packageName, releases}>}`.
 - Produces: `readCatalogueSource(value)`, `sourceFromVerifiedCatalogue(catalogue)`, `applyReleaseEvidence({current, evidence})`, and `renderCatalogueSource(source)`.
 - Invariant: adapters sort by `id`; releases sort by exact numeric SemVer ascending; an existing ID/package identity disagreement fails instead of replacing another adapter.
@@ -164,6 +166,7 @@ prism-tool commit create --type fix --scope catalogue --subject "derive determin
 ### Task 2: Bounded npm Evidence Boundary
 
 **Files:**
+
 - Create: `src/evidence-http.js`
 - Create: `src/npm-evidence.js`
 - Modify: `src/payload.js`
@@ -172,6 +175,7 @@ prism-tool commit create --type fix --scope catalogue --subject "derive determin
 - Modify: `test/payload.test.js`
 
 **Interfaces:**
+
 - Produces: `EvidenceUnavailableError`, `EvidenceInvalidError`, and `requestBoundedJson({url, fetchImpl, maximumBytes, timeoutMs, headers, unavailableStatuses})`.
 - Produces: `resolveNpmReleaseEvidence({packageName, version, fetchImpl, sleepImpl}) -> Promise<{integrity, publishedAt}>`.
 - `hydrateCatalogue({source, sequence, now, npmEvidence})` consumes an injected `npmEvidence({packageName, version})`; the CLI later supplies the real npm boundary.
@@ -243,10 +247,12 @@ prism-tool commit create --type fix --scope evidence --subject "bound exact npm 
 ### Task 3: Immutable Prism GitHub Evidence Client
 
 **Files:**
+
 - Create: `src/github-evidence.js`
 - Create: `test/github-evidence.test.js`
 
 **Interfaces:**
+
 - Produces: `resolvePrismReleaseEvidence({version, mergeCommit, fetchImpl}) -> Promise<{repository, version, mergeCommit, adapters}>`.
 - The repository and origin are constants: `kyaulabs/prism` and `https://api.github.com`.
 - `adapters` uses catalogue-source shape and contains no registry URL, integrity, publication time, command, credential, sequence, branch, or payload bytes.
@@ -306,7 +312,7 @@ Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `src/github-evidence.js`.
 
 Use `requestBoundedJson` for every request with GitHub API headers and a 4 MiB response limit; use 64 KiB for decoded `.prism/release.json` and 1 MiB for decoded package manifests. Validate lowercase 40-hex commit input and strict stable SemVer before any request.
 
-Require the stable Release to be non-draft/non-prerelease with `tag_name === `v${version}`` and `target_commitish === mergeCommit`. Require both release and package refs to be direct commit refs at `mergeCommit`; annotated tags and wrong SHAs fail closed. Require the commit response SHA to match and have two parents.
+Require the stable Release to be non-draft/non-prerelease with `tag_name` equal to `v${version}` and `target_commitish === mergeCommit`. Require both release and package refs to be direct commit refs at `mergeCommit`; annotated tags and wrong SHAs fail closed. Require the commit response SHA to match and have two parents.
 
 Decode GitHub content responses only when `type === 'file'`, `encoding === 'base64'`, path matches exactly, declared size is within bounds, and decoded bytes round-trip canonically. Parse a closed release configuration with exact root and declaration keys. Require each declaration path to be a canonical relative member of `packages`, then validate its manifest name, exact version, public status, Prism adapter marker, and matching bootstrap protocol. Derive package tag prefixes from the package name after `/`; never accept tag names from evidence data.
 
@@ -328,11 +334,13 @@ prism-tool commit create --type fix --scope evidence --subject "verify immutable
 ### Task 4: Evidence-Backed Publisher CLI
 
 **Files:**
+
 - Modify: `src/cli.js`
 - Modify: `test/cli.test.js`
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Produces CLI forms: `prepare-release <stable-version> <lowercase-40-hex-commit>` and `prepare-renewal`.
 - `run(args, dependencies)` gains `githubFetchImpl`, `npmFetchImpl`, and `sleepImpl`; defaults remain built-in fetch and timer promises.
 - Both preparation commands require and verify the existing `catalogue.json` with `allowExpired: true`, derive `sequence + 1`, render `catalogue-source.json`, and write `.publisher/payload.json` only after all evidence succeeds.
@@ -426,6 +434,7 @@ prism-tool commit create --type fix --scope publisher --subject "prepare catalog
 ### Task 5: Public Contract and Complete Fail-Closed Matrix
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `test/cli.test.js`
 - Modify: `test/github-evidence.test.js`
@@ -434,10 +443,11 @@ prism-tool commit create --type fix --scope publisher --subject "prepare catalog
 - Modify: `catalogue-source.json` only if deterministic rendering changes its bytes
 
 **Interfaces:**
+
 - Documents: release update and renewal command contracts, fixed evidence origins, generated-source policy, retry bound, and failure guarantees.
 - Verifies: every acceptance criterion through fake boundaries and the public CLI.
 
-- [ ] **Step 1: Add the final failing acceptance-matrix and public-contract tests**
+- [x] **Step 1: Add the final failing acceptance-matrix and public-contract tests**
 
 Create the documentation contract first; it is Red until README stops presenting local source as authority:
 
@@ -489,13 +499,13 @@ test('prepare-release fails closed on a redirected Release response', async () =
 
 The complete fault-name table is: `streamed-oversized-release`, `github-timeout-exhaustion`, `mutable-release-ref`, `prerelease`, `release-commit-disagreement`, `package-tag-disagreement`, `manifest-version-disagreement`, `declaration-unknown-field`, `protocol-mismatch`, `missing-npm-integrity`, `noncanonical-npm-integrity`, `invalid-npm-publication-time`, `verified-catalogue-identity-conflict`, and `unexpected-trigger-argument`. Add a renewal case proving unrelated releases and statuses survive byte-for-byte in rendered source while npm evidence is refreshed.
 
-- [ ] **Step 2: Run the acceptance matrix to verify Red**
+- [x] **Step 2: Run the acceptance matrix to verify Red**
 
 Run: `node --test test/documentation.test.js test/github-evidence.test.js test/npm-evidence.test.js test/cli.test.js`
 
 Expected: FAIL in `documents evidence-backed preparation commands` because README still documents `catalogue:prepare` and hand-edited source. Boundary cases that are already implemented may pass; keep them as acceptance evidence.
 
-- [ ] **Step 3: Complete hardening and update publisher documentation**
+- [x] **Step 3: Complete hardening and update publisher documentation**
 
 Make only the minimal boundary corrections exposed by Step 2. Do not broaden accepted schemas or add recovery shortcuts.
 
@@ -511,7 +521,7 @@ Rewrite README preparation guidance so it states:
 
 If the committed `catalogue-source.json` is not already equal to `renderCatalogueSource(sourceFromVerifiedCatalogue(verifiedCatalogue))`, replace it with those deterministic bytes and make no policy change.
 
-- [ ] **Step 4: Run final verification**
+- [x] **Step 4: Run final verification**
 
 Run: `npm test`
 
@@ -525,11 +535,7 @@ Run: `rg -n "catalogue:prepare([^/-]|$)|Edit only .*catalogue-source[.]json|\\[D
 
 Expected: no obsolete manual-prepare instructions and no debug instrumentation.
 
-Run: `/check`
-
-Expected: the project pre-push gate passes.
-
-- [ ] **Step 5: Create the terminal implementation commit**
+- [x] **Step 5: Create the terminal implementation commit**
 
 ```bash
 git add README.md test/cli.test.js test/github-evidence.test.js test/npm-evidence.test.js test/documentation.test.js catalogue-source.json

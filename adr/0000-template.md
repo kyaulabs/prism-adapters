@@ -1,4 +1,4 @@
-# NNNN. <title>
+# NNNN. Decision title
 
 Date: YYYY-MM-DD
 
