@@ -220,7 +220,7 @@ prism-tool commit create --type fix --scope publication --subject "validate cata
 - Consumes: a closed local intent and normalized remote snapshot.
 - Produces: `publicationBranch(sequence) -> string`; `decidePublication({intent, remote}) -> Frozen<{action, branchName, pullRequestNumber?}>` where action is `CREATE_BRANCH`, `CREATE_PULL_REQUEST`, or `IDEMPOTENT`.
 
-- [ ] **Step 1: Write the failing state table**
+- [x] **Step 1: Write the failing state table**
 
 Use one fixed intent:
 
@@ -249,13 +249,13 @@ Cover this complete matrix in `test/publication-state.test.js`:
 | PR exists without branch | throw conflict |
 | malformed intent, snapshot, digest, SHA, sequence, or PR number | throw invalid |
 
-- [ ] **Step 2: Run the state tests to verify Red**
+- [x] **Step 2: Run the state tests to verify Red**
 
 Run: `node --test test/publication-state.test.js`
 
 Expected: FAIL because `src/publication-state.js` does not exist.
 
-- [ ] **Step 3: Implement the pure state machine**
+- [x] **Step 3: Implement the pure state machine**
 
 Create `src/publication-state.js` around this closed decision core:
 
@@ -308,13 +308,13 @@ export function decidePublication({intent, remote}) {
 
 Implement closed validators for exactly the fields used above. `remote.branch` is either `null` or the exact branch shape; `openPullRequests` is a bounded array of at most 100 normalized entries. `conflict()` throws only the generic conflict error so untrusted remote values never enter logs.
 
-- [ ] **Step 4: Run the state tests to verify Green**
+- [x] **Step 4: Run the state tests to verify Green**
 
 Run: `node --test test/publication-state.test.js`
 
 Expected: PASS for every transition and conflict.
 
-- [ ] **Step 5: Create the commit**
+- [x] **Step 5: Create the commit**
 
 Run `git add src/publication-state.js test/publication-state.test.js`, then load `conventional-commits` and run as the sole command in its assistant batch:
 
