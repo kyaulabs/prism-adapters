@@ -445,7 +445,7 @@ prism-tool commit create --type fix --scope publication --subject "bound GitHub 
 - Consumes: fixed workspace files, trusted Actions provenance, protected App-key file, `APP_ID`, `verifyEnvelope`, and the Task 3 client.
 - Produces: `runProtectedPublication({cwd, env, stdout, tokenImpl, publishImpl, now}) -> Promise<{state, branchName, pullRequestNumber}>`; package command `catalogue:publish-protected`.
 
-- [ ] **Step 1: Write failing protected publication tests**
+- [x] **Step 1: Write failing protected publication tests**
 
 Build temporary fixtures with synthetic Ed25519 catalogue keys/envelopes and a synthetic RSA App key. Assert the runner:
 
@@ -461,13 +461,13 @@ Build temporary fixtures with synthetic Ed25519 catalogue keys/envelopes and a s
 
 Reject local/non-main/wrong-workflow/debug/disabled contexts, missing or malformed trigger metadata, wrong base SHA, malformed App ID, non-private App key file, invalid signature, wrong sequence, source/envelope disagreement, stale base, and publication conflicts before reporting success.
 
-- [ ] **Step 2: Run runner tests to verify Red**
+- [x] **Step 2: Run runner tests to verify Red**
 
 Run: `node --test test/publication-runner.test.js`
 
 Expected: FAIL because `src/publication-runner.js` does not exist.
 
-- [ ] **Step 3: Implement protected publication orchestration**
+- [x] **Step 3: Implement protected publication orchestration**
 
 Create `src/publication-runner.js` with the same fixed repository/ref/workflow/event/debug/activation provenance as `src/protected-runner.js`. Default `env` from `process.env` with a rule-specific `nosemgrep: prism-no-process-env` comment citing ADR-0095. Read bounded files without following symlinks; read the App key with `readBoundedPrivateFile`; fill its buffer in `finally`; and remove only an absolute `$RUNNER_TEMP/prism-catalogue-publication` directory proven outside the workspace.
 
@@ -491,7 +491,7 @@ Add to `package.json`:
 "catalogue:publish-protected": "node src/publication-runner.js"
 ```
 
-- [ ] **Step 4: Run focused and full tests**
+- [x] **Step 4: Run focused and full tests**
 
 Run: `node --test test/publication-runner.test.js test/protected-runner.test.js test/protected-signing.test.js`
 
@@ -501,7 +501,7 @@ Run: `npm test`
 
 Expected: PASS.
 
-- [ ] **Step 5: Create the commit**
+- [x] **Step 5: Create the commit**
 
 Run `git add package.json src/publication-runner.js test/publication-runner.test.js`, then load `conventional-commits` and run as the sole command in its assistant batch:
 

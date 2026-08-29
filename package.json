@@ -15,6 +15,7 @@
     "catalogue:prepare-renewal": "node src/cli.js prepare-renewal",
     "catalogue:prepare-trigger": "node src/trigger-runner.js",
     "catalogue:sign-protected": "node src/protected-runner.js",
+    "catalogue:publish-protected": "node src/publication-runner.js",
     "catalogue:verify": "node src/cli.js verify"
   }
 }
