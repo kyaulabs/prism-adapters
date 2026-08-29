@@ -25,7 +25,9 @@ export function parsePublicationTrigger({eventName, eventBytes}) {
     if (event === null || typeof event !== 'object' || Array.isArray(event)) {
         throw new Error('catalogue publication trigger is invalid');
     }
-    if (eventName === 'schedule') return Object.freeze({kind: 'renewal'});
+    if (eventName === 'schedule' && event.schedule === '0 6 * * *') {
+        return Object.freeze({kind: 'renewal'});
+    }
     if (eventName === 'repository_dispatch') {
         const payload = event.client_payload;
         if (event.action === 'prism-release-published' && exactKeys(payload, [

@@ -11,7 +11,7 @@ const workflow = await readFile(
 
 test('all trusted triggers share one non-cancelling publication transaction', () => {
     assert.match(workflow, /^on:\n  repository_dispatch:\n    types: \[prism-release-published\]/m);
-    assert.match(workflow, /  schedule:\n    - cron: '0 6 [*]\/3 [*] [*]'/);
+    assert.match(workflow, /  schedule:\n    - cron: '0 6 [*] [*] [*]'/);
     assert.match(workflow, /  workflow_dispatch:\n    inputs:\n      mode:/);
     assert.match(workflow, /options:\n          - renewal\n          - release/);
     assert.match(workflow, /      version:\n        type: string/);
@@ -27,6 +27,10 @@ test('separates signing and App credentials behind read-only workflow permission
     assert.equal((workflow.match(/secrets[.]CATALOGUE_PUBLICATION_APP_PRIVATE_KEY/g) ?? []).length, 1);
     assert.equal((workflow.match(/vars[.]CATALOGUE_PUBLICATION_APP_ID/g) ?? []).length, 1);
     assert.equal((workflow.match(/npm run catalogue:prepare-trigger/g) ?? []).length, 2);
+    assert.equal((workflow.match(/id: preparation/g) ?? []).length, 2);
+    assert.equal((workflow.match(
+        /if: steps[.]preparation[.]outputs[.]publication_ready == 'true'/g,
+    ) ?? []).length, 2);
     assert.match(workflow, /needs: synthetic-validation/);
     assert.match(workflow, /environment: catalogue-signing/);
     assert.match(workflow, /permissions:\n\s+contents: read/);
@@ -58,8 +62,9 @@ test('workflow disables tracing, uses separate private files, and always cleans'
 test('workflow permits only the bounded App-backed publication command', () => {
     assert.doesNotMatch(
         workflow,
-        /upload-artifact|actions\/cache|cache:|GITHUB_OUTPUT|GITHUB_STEP_SUMMARY/,
+        /upload-artifact|actions\/cache|cache:|GITHUB_STEP_SUMMARY/,
     );
+    assert.doesNotMatch(workflow, /GITHUB_OUTPUT/);
     assert.doesNotMatch(
         workflow,
         /git push|gh pr|update-ref|force.push|auto.merge|merge pull|close pull/,

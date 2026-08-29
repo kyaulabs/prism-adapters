@@ -101,6 +101,11 @@ async function appSecretAbsent(directory) {
     await assert.rejects(readFile(path.join(directory, 'app.pem')), /ENOENT/);
 }
 
+async function appSecretPresent(directory) {
+    assert.match(await readFile(path.join(directory, 'app.pem'), 'utf8'),
+        /BEGIN PRIVATE KEY/);
+}
+
 test('reverifies and publishes only the fixed protected catalogue candidate', async () => {
     const value = await fixture();
     let tokenInput;
@@ -178,7 +183,7 @@ for (const [name, change] of [
             },
         }), /protected publication runner is not trusted/);
         assert.equal(called, false);
-        await appSecretAbsent(value.appDirectory);
+        await appSecretPresent(value.appDirectory);
     });
 }
 

@@ -128,14 +128,15 @@ export async function runProtectedPublication({
     publishImpl = publishCatalogueCandidate,
     fetchImpl = globalThis.fetch,
 } = {}) {
-    const appDirectory = path.isAbsolute(env.RUNNER_TEMP ?? '')
-        ? path.join(env.RUNNER_TEMP, 'prism-catalogue-publication')
-        : null;
+    let appDirectory = null;
     let privateKeyBytes;
     try {
-        if (!trustedRunner({cwd, env}) || appDirectory === null ||
-            !/^[1-9]\d{0,15}$/.test(env.APP_ID ?? '')) {
+        if (!trustedRunner({cwd, env})) {
             throw new Error('protected publication runner is not trusted');
+        }
+        appDirectory = path.join(env.RUNNER_TEMP, 'prism-catalogue-publication');
+        if (!/^[1-9]\d{0,15}$/.test(env.APP_ID ?? '')) {
+            throw new Error('protected catalogue publication App ID is invalid');
         }
         const [sourceBytes, envelopeBytes, triggerBytes, publicKey] = await Promise.all([
             readBoundedRegularFile({
@@ -206,7 +207,8 @@ export async function runProtectedPublication({
         );
         return result;
     } catch (error) {
-        if (error.message === 'protected publication runner is not trusted') throw error;
+        if (error instanceof Error &&
+            error.message === 'protected publication runner is not trusted') throw error;
         throw new Error('protected catalogue publication failed', {cause: error});
     } finally {
         privateKeyBytes?.fill(0);

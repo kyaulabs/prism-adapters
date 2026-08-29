@@ -196,6 +196,7 @@ async function publicationRequest({
         return {
             status: response.status,
             value: JSON.parse((await responseBytes(response)).toString('utf8')),
+            link: response.headers?.get?.('link') ?? null,
         };
     } catch {
         throw publicationInvalid();
@@ -240,7 +241,8 @@ async function inspectRemotePublication({token, intent, fetchImpl}) {
         token,
         fetchImpl,
     });
-    if (!Array.isArray(pullsResponse.value) || pullsResponse.value.length > 100) {
+    if (!Array.isArray(pullsResponse.value) || pullsResponse.value.length > 100 ||
+        (typeof pullsResponse.link === 'string' && /rel="next"/.test(pullsResponse.link))) {
         throw publicationInvalid();
     }
     const openPullRequests = pullsResponse.value.map((pull) => {

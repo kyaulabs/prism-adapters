@@ -115,9 +115,9 @@ See `SECURITY.md` for exposure and Core-first rotation procedures.
 
 ## Automated publication
 
-A repository dispatch after a stable Prism release, the three-day renewal
-schedule, and explicit manual recovery all enter the same non-cancelling
-transaction. Each run validates the trigger and public evidence with:
+A repository dispatch after a stable Prism release, a daily schedule with a
+verified three-day renewal gate, and explicit manual recovery all enter the
+same non-cancelling transaction. Each run validates the trigger and public evidence with:
 
 ```bash
 npm run catalogue:prepare-trigger

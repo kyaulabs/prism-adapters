@@ -4,7 +4,7 @@ on:
   repository_dispatch:
     types: [prism-release-published]
   schedule:
-    - cron: '0 6 */3 * *'
+    - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -49,6 +49,7 @@ jobs:
       - name: Run synthetic-key tests
         run: npm test
       - name: Validate trigger and public evidence
+        id: preparation
         run: npm run catalogue:prepare-trigger
 
   protected-signing:
@@ -86,8 +87,10 @@ jobs:
       - name: Re-run synthetic-key tests
         run: npm test
       - name: Recompute trigger and public evidence
+        id: preparation
         run: npm run catalogue:prepare-trigger
       - name: Sign and reverify in protected environment
+        if: steps.preparation.outputs.publication_ready == 'true'
         shell: bash
         env:
           ENCRYPTED_PRIVATE_KEY: ${{ secrets.CATALOGUE_SIGNING_PRIVATE_KEY }}
@@ -105,6 +108,7 @@ jobs:
           npm run catalogue:sign-protected
           npm run catalogue:verify
       - name: Publish immutable sequence branch and pull request
+        if: steps.preparation.outputs.publication_ready == 'true'
         shell: bash
         env:
           APP_ID: ${{ vars.CATALOGUE_PUBLICATION_APP_ID }}

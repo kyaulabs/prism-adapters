@@ -56,7 +56,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 
 ### Catalogue Publication Transaction
 
-- All release dispatch, three-day renewal, and manual recovery runs share one non-cancelling transaction.
+- All release dispatch, manual recovery, and due scheduled renewal runs share one non-cancelling transaction; a daily schedule applies a verified three-day renewal gate.
 - Each run binds the next sequence, deterministic source, signed envelope, and publication intent to an attested `main` commit, then rechecks that base before publication.
 - A sequence branch is immutable after atomic creation. Automation never updates or force-pushes it.
 - Only exact partial branch or pull-request state is recoverable; conflicting bytes, base, signature, sequence, or open publication state fails closed.

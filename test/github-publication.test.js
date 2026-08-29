@@ -123,6 +123,47 @@ test('rejects malformed or overbroad installation-token authority', async () => 
     }), /GitHub publication authentication is invalid/);
 });
 
+test('fails closed when the open pull-request snapshot is paginated', async () => {
+    const baseSha = 'a'.repeat(40);
+    const sourceBytes = Buffer.from('{"schemaVersion":1,"adapters":[]}\n');
+    const envelopeBytes = Buffer.from('{"synthetic":"signed-envelope"}\n');
+    const intent = {
+        baseSha,
+        sequence: 8,
+        branchName: 'catalogue/sequence-8',
+        sourceDigest: sha256(sourceBytes),
+        envelopeDigest: sha256(envelopeBytes),
+    };
+    const pulls = Array.from({length: 100}, (_value, index) => ({
+        number: index + 1,
+        state: 'open',
+        head: {ref: `feature-${index}`, sha: 'd'.repeat(40)},
+        base: {ref: 'main', sha: baseSha},
+    }));
+    let requests = 0;
+    const fetchImpl = async (url) => {
+        requests += 1;
+        return url.endsWith('/git/ref/heads/main')
+            ? response({ref: 'refs/heads/main', object: {type: 'commit', sha: baseSha}})
+            : response(pulls, {
+            headers: {
+                link: '<https://api.github.com/repositories/7/pulls?page=2>; rel="next"',
+            },
+        });
+    };
+
+    await assert.rejects(publishCatalogueCandidate({
+        token: 'opaque-synthetic-installation-token',
+        intent,
+        sourceBytes,
+        envelopeBytes,
+        title: 'chore(catalogue): publish sequence 8',
+        body: 'Synthetic publication body',
+        fetchImpl,
+    }), /GitHub publication state is invalid/);
+    assert.equal(requests, 2);
+});
+
 test('reports exact existing branch and pull request as idempotent success', async () => {
     const baseSha = 'a'.repeat(40);
     const commitSha = 'd'.repeat(40);

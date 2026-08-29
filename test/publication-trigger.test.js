@@ -8,7 +8,7 @@ import {parsePublicationTrigger} from '../src/publication-trigger.js';
 test('normalizes a scheduled renewal trigger', () => {
     assert.deepEqual(parsePublicationTrigger({
         eventName: 'schedule',
-        eventBytes: Buffer.from('{"schedule":"0 6 */3 * *"}'),
+        eventBytes: Buffer.from('{"schedule":"0 6 * * *"}'),
     }), {kind: 'renewal'});
 });
 
@@ -61,6 +61,7 @@ const invalid = [
     ['empty bytes', 'schedule', Buffer.alloc(0)],
     ['malformed JSON', 'schedule', Buffer.from('{')],
     ['non-object JSON', 'schedule', Buffer.from('[]')],
+    ['schedule without cron evidence', 'schedule', Buffer.from('{}')],
     ['unknown event', 'pull_request', Buffer.from('{}')],
     ['unknown dispatch action', 'repository_dispatch', Buffer.from(JSON.stringify({
         action: 'other',

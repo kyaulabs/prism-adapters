@@ -1,11 +1,17 @@
 // $KYAULabs: trigger-runner.js kyau@aura.kyaulabs 2026/08/29 -0700 Exp $
 
-import {realpath} from 'node:fs/promises';
+import {constants} from 'node:fs';
+import {open, realpath} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import {run as prepareCatalogue} from './cli.js';
+import {verifyEnvelope} from './envelope.js';
 import {parsePublicationTrigger} from './publication-trigger.js';
+import {
+    EXPECTED_PUBLIC_KEY_SHA256,
+    loadTrustedPublicKey,
+} from './public-key.js';
 import {
     readBoundedRegularFile,
     writePublicFileAtomically,
@@ -17,6 +23,42 @@ const WORKFLOW_REF = `${REPOSITORY}/.github/workflows/catalogue-signing.yml@${DE
 const EVENTS = new Set(['repository_dispatch', 'schedule', 'workflow_dispatch']);
 const SHA = /^[0-9a-f]{40}$/;
 const DIGEST = /^[0-9a-f]{64}$/;
+const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+
+async function scheduledRenewalDue({cwd, now, expectedFingerprint}) {
+    const [catalogueBytes, publicKey] = await Promise.all([
+        readBoundedRegularFile({
+            filePath: path.join(cwd, 'catalogue.json'),
+            maximum: 4 * 1024 * 1024,
+        }),
+        loadTrustedPublicKey({
+            filePath: path.join(cwd, 'adapter-catalogue-public.pem'),
+            expectedFingerprint,
+        }),
+    ]);
+    const verified = verifyEnvelope({
+        bytes: catalogueBytes,
+        publicKey,
+        now,
+        allowExpired: true,
+    });
+    return now.getTime() >= new Date(verified.catalogue.issuedAt).getTime() + THREE_DAYS;
+}
+
+async function publishReady(outputPath, ready) {
+    let handle;
+    try {
+        handle = await open(outputPath, constants.O_WRONLY | constants.O_APPEND |
+            constants.O_NOFOLLOW);
+        const stat = await handle.stat();
+        if (!stat.isFile() || stat.size > 65_536) throw new Error();
+        await handle.writeFile(`publication_ready=${ready ? 'true' : 'false'}\n`);
+    } catch {
+        throw new Error('catalogue trigger output is invalid');
+    } finally {
+        await handle?.close().catch(() => {});
+    }
+}
 
 function trustedRunner({cwd, env}) {
     return env.GITHUB_ACTIONS === 'true' &&
@@ -27,7 +69,9 @@ function trustedRunner({cwd, env}) {
         EVENTS.has(env.GITHUB_EVENT_NAME) &&
         path.isAbsolute(env.GITHUB_EVENT_PATH ?? '') &&
         path.isAbsolute(env.GITHUB_WORKSPACE ?? '') &&
-        path.resolve(env.GITHUB_WORKSPACE) === path.resolve(cwd);
+        path.resolve(env.GITHUB_WORKSPACE) === path.resolve(cwd) &&
+        path.isAbsolute(env.RUNNER_TEMP ?? '') &&
+        path.isAbsolute(env.GITHUB_OUTPUT ?? '');
 }
 
 export async function runTriggerPreparation({
@@ -35,17 +79,28 @@ export async function runTriggerPreparation({
     env = process.env, // nosemgrep: prism-no-process-env -- GitHub Actions provenance is the publication boundary accepted in ADR-0095
     stdout = process.stdout,
     prepareImpl = prepareCatalogue,
+    scheduleDueImpl = scheduledRenewalDue,
+    expectedFingerprint = EXPECTED_PUBLIC_KEY_SHA256,
+    now = new Date(),
 } = {}) {
     try {
         if (!trustedRunner({cwd, env})) {
             throw new Error('catalogue trigger runner is not trusted');
         }
-        const [workspace, eventPath] = await Promise.all([
+        const [workspace, runnerTemp, eventPath, outputPath] = await Promise.all([
             realpath(cwd),
+            realpath(env.RUNNER_TEMP),
             realpath(env.GITHUB_EVENT_PATH),
+            realpath(env.GITHUB_OUTPUT),
         ]);
-        const relative = path.relative(workspace, eventPath);
-        if (relative === '' || relative === '..' || relative.startsWith(`..${path.sep}`)) {
+        const workspaceRelative = path.relative(workspace, eventPath);
+        const runnerRelative = path.relative(runnerTemp, eventPath);
+        const outputRelative = path.relative(runnerTemp, outputPath);
+        if (workspaceRelative === '' ||
+            (!workspaceRelative.startsWith(`..${path.sep}`) && workspaceRelative !== '..') ||
+            runnerRelative === '' || runnerRelative === '..' ||
+            runnerRelative.startsWith(`..${path.sep}`) || outputRelative === '' ||
+            outputRelative === '..' || outputRelative.startsWith(`..${path.sep}`)) {
             throw new Error('catalogue trigger runner is not trusted');
         }
         const eventBytes = await readBoundedRegularFile({
@@ -56,6 +111,14 @@ export async function runTriggerPreparation({
             eventName: env.GITHUB_EVENT_NAME,
             eventBytes,
         });
+        if (env.GITHUB_EVENT_NAME === 'schedule' && !await scheduleDueImpl({
+            cwd,
+            now,
+            expectedFingerprint,
+        })) {
+            await publishReady(outputPath, false);
+            return Object.freeze({ready: false, trigger});
+        }
         const args = trigger.kind === 'release'
             ? ['prepare-release', trigger.version, trigger.mergeCommit]
             : ['prepare-renewal'];
@@ -74,9 +137,11 @@ export async function runTriggerPreparation({
             filePath: path.join(cwd, '.publisher', 'trigger.json'),
             bytes: Buffer.from(`${JSON.stringify({schemaVersion: 1, ...result})}\n`, 'utf8'),
         });
+        await publishReady(outputPath, true);
         return result;
     } catch (error) {
-        if (error.message === 'catalogue trigger runner is not trusted') throw error;
+        if (error instanceof Error &&
+            error.message === 'catalogue trigger runner is not trusted') throw error;
         throw new Error('catalogue trigger preparation failed', {cause: error});
     }
 }
