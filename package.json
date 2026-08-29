@@ -13,7 +13,7 @@
     "catalogue:check-key": "node src/cli.js check-key",
     "catalogue:prepare-release": "node src/cli.js prepare-release",
     "catalogue:prepare-renewal": "node src/cli.js prepare-renewal",
-    "catalogue:sign": "node src/cli.js sign",
+    "catalogue:sign-protected": "node src/protected-runner.js",
     "catalogue:verify": "node src/cli.js verify"
   }
 }

@@ -39,18 +39,26 @@ function publicDer(key) {
     return publicKey.export({type: 'spki', format: 'der'});
 }
 
-export function createEnvelope({payload, privateKey, publicKey}) {
-    if (privateKey?.asymmetricKeyType !== 'ed25519' || publicKey?.asymmetricKeyType !== 'ed25519') {
+export function createEnvelopeFromPayloadBytes({payloadBytes, privateKey, publicKey}) {
+    if (!Buffer.isBuffer(payloadBytes) || payloadBytes.length === 0 ||
+        payloadBytes.length > MAX_PAYLOAD_BYTES) {
+        throw new Error('catalogue payload is invalid');
+    }
+    let payload;
+    try {
+        payload = JSON.parse(payloadBytes.toString('utf8'));
+    } catch {
+        throw new Error('catalogue payload is invalid');
+    }
+    validateCataloguePayload({value: payload, now: new Date(payload.issuedAt)});
+    if (privateKey?.asymmetricKeyType !== 'ed25519' ||
+        publicKey?.asymmetricKeyType !== 'ed25519') {
         throw new Error('catalogue signing requires Ed25519 keys');
     }
     const derived = publicDer(privateKey);
     const trusted = publicDer(publicKey);
     if (derived.length !== trusted.length || !timingSafeEqual(derived, trusted)) {
         throw new Error('private key does not match the trusted public key');
-    }
-    const payloadBytes = Buffer.from(`${JSON.stringify(payload)}\n`, 'utf8');
-    if (payloadBytes.length === 0 || payloadBytes.length > MAX_PAYLOAD_BYTES) {
-        throw new Error('catalogue payload is too large');
     }
     const signature = sign(null, payloadBytes, privateKey);
     const envelope = {
@@ -61,9 +69,19 @@ export function createEnvelope({payload, privateKey, publicKey}) {
         signature: signature.toString('base64'),
     };
     const bytes = Buffer.from(`${JSON.stringify(envelope)}\n`, 'utf8');
-    if (bytes.length > MAX_ENVELOPE_BYTES) throw new Error('catalogue envelope is too large');
+    if (bytes.length > MAX_ENVELOPE_BYTES) {
+        throw new Error('catalogue envelope is too large');
+    }
     verifyEnvelope({bytes, publicKey, now: new Date(payload.issuedAt)});
     return bytes;
+}
+
+export function createEnvelope({payload, privateKey, publicKey}) {
+    return createEnvelopeFromPayloadBytes({
+        payloadBytes: Buffer.from(`${JSON.stringify(payload)}\n`, 'utf8'),
+        privateKey,
+        publicKey,
+    });
 }
 
 export function verifyEnvelope({

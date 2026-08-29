@@ -21,6 +21,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 | renewal | A transaction that preserves the verified current release set, revalidates every exact npm release, and prepares a fresh validity window without discovering or removing releases. |
 | deterministic catalogue source | The complete unsigned source policy rendered solely from validated release evidence and preserved verified records. |
 | catalogue publication transaction | The serialized cross-repository workflow that validates evidence, signs the next sequence in the protected publisher environment, and opens a human-merged publication pull request. |
+| protected signing environment | The dedicated GitHub Actions environment that exposes separate encrypted-key and passphrase secrets only to trusted default-branch catalogue signing code. |
 
 ## Entities and Invariants
 
@@ -45,6 +46,14 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 - A renewal preserves the complete verified release set and revalidates each exact npm release.
 - Equivalent evidence produces deterministic source bytes.
 
+### Protected Signing Environment
+
+- Runs only trusted `main` publisher code on a GitHub-hosted ephemeral runner after unprivileged validation and synthetic-key tests pass.
+- Receives the encrypted PKCS#8 Ed25519 key and passphrase as separate environment-scoped GitHub Actions secrets.
+- Matches the committed Core SPKI fingerprint and key ID, signs and reverifies exact prepared payload bytes, and removes runner-private secret material on every exit path.
+- Produces no secret-bearing argument, log, output, summary, artifact, cache, fixture, or local state.
+- Remains activation-gated until human maintainers provision the environment, bound Actions log retention, and offline recovery custody.
+
 ### Failure Boundary
 
 - Evidence failure or retry exhaustion produces no prepared signing payload and performs no signing or Git mutation.
@@ -63,7 +72,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 ### This repository delegates
 
 - **Prism Core** — release-managed package configuration, adapter release declarations, stable Release and package-tag production, and minimal dispatch.
-- **GitHub** — immutable repository evidence, protected Actions environments, and human-reviewed pull requests.
+- **GitHub** — immutable repository evidence, environment-scoped secret storage, ephemeral Actions runners, protected Actions environments, and human-reviewed pull requests.
 - **npm** — exact public package integrity and publication-time evidence; npm publication remains human-owned.
 - **Human maintainers** — review and merge every catalogue publication pull request.
 
