@@ -17,10 +17,11 @@ private signing key.
 - Node.js 22.19 or newer
 - npm
 - the committed `adapter-catalogue-public.pem`
-- a dedicated Ed25519 private signing key held outside every repository
+- a dedicated encrypted PKCS#8 Ed25519 private key with an offline recovery copy
+- a separately protected signing-key passphrase
+- a `catalogue-signing` GitHub Actions environment restricted to `main`
 - permission to read Prism evidence from the public GitHub API
 - permission to read the public npm registry during preparation
-- permission to push the signed publication branch as a human
 
 The trusted public-key fingerprint is:
 
@@ -71,54 +72,53 @@ Both preparation modes require an existing verified catalogue and derive exactly
 its next sequence. Expiry is tolerated only for sequence recovery. Neither mode
 requests or uses signing-key material.
 
-## Sign as the human key custodian
+## Protected production signing
 
-The coding agent must stop here. In an interactive terminal, the human key
-custodian runs:
+Production signing runs only in `.github/workflows/catalogue-signing.yml` on
+trusted `main`. The runner-only command takes no arguments:
 
 ```bash
-npm run catalogue:sign
+npm run catalogue:sign-protected
 ```
 
-The command prompts for the private-key path. Absolute paths, relative paths,
-and leading `~/`, `$HOME/`, or `${HOME}/` spellings are accepted; no other
-shell expansion occurs. The key must be a regular, non-symlink Ed25519 private
-key outside this repository. Encrypted PKCS#8 keys trigger a second hidden
-passphrase prompt. Preparation prints the SHA-256 digest of the exact payload.
-Before requesting the key, signing prints the current digest and requires the
-custodian to confirm it matches the preparation output. The command then
-derives the public key, compares it with `adapter-catalogue-public.pem`, signs
-the exact prepared payload bytes, verifies the resulting envelope, and
-atomically writes `catalogue.json`.
+It rejects local execution, pull requests, reusable workflows, non-`main`
+refs, dispatch-selected code, debug runners, and disabled activation before
+reading signing files. It requires an encrypted PKCS#8 Ed25519 key, matches the
+committed Core SPKI fingerprint and key ID, signs the exact prepared payload
+bytes, reverifies the envelope, and removes runner-private secret files on
+success or failure.
 
-Never put the private key, its path, or its passphrase in this repository,
-another repository, CI, an `.env` file, a command argument, an environment
-variable, a fixture, a log, an issue, or chat.
+Human administrators create the `catalogue-signing` environment, restrict its
+deployment branches to `main`, and add separate environment secrets named
+`CATALOGUE_SIGNING_PRIVATE_KEY` and `CATALOGUE_SIGNING_PASSPHRASE`. Keep the
+repository-level Actions variable `CATALOGUE_SIGNING_ENABLED` absent or `false`
+until issue #5 and the activation task have passed review. A human later
+manages that variable under **Repository Settings → Secrets and variables →
+Actions → Variables**; code and agents never set it.
+
+GitHub cannot reveal stored secret values. Keep an offline encrypted-key
+recovery copy and protect the passphrase separately. Re-provision lost GitHub
+copies from those sources. A successor receives repository/environment
+administration and signing custody through an explicit out-of-band handoff.
+See `SECURITY.md` for exposure and Core-first rotation procedures.
+
+The issue #4 readiness workflow prepares a renewal, signs it, and verifies the
+public envelope on an ephemeral runner. It does not upload signing state, push
+a branch, write `main`, or open or merge a pull request. Issue #5 owns the
+sequence-safe publication branch and human-merged pull-request transaction.
 
 ## Verify and publish
 
-After the human signing command succeeds, the agent may resume:
+Until issue #5 lands and production activation is reviewed, the protected job
+remains disabled and no automated publication occurs. The later publication
+transaction will include only the deterministic `catalogue-source.json` and
+public signed `catalogue.json` in a sequence-specific branch and will require a
+human merge.
 
-```bash
-npm run catalogue:verify
-npm test
-git diff -- catalogue.json
-```
-
-The diff is public signed data. Confirm that its sequence increased and its
-expiry is six days after issue. Commit it with the structured Prism commit
-workflow. The human pushes the branch and merges the pull request.
-
-After `main` updates, run:
-
-```bash
-curl --fail --silent --show-error --output /dev/null \
-  --write-out '%{http_code}\n' \
-  https://raw.githubusercontent.com/kyaulabs/prism-adapters/main/catalogue.json
-```
-
-Expected output is `200`. Then run strict-empty Prism `/setup` in the intended
-new project and confirm adapter discovery reports `CATALOGUE_VALID`.
+After a human merges a publication pull request to `main`, verify HTTP `200` at
+the fixed raw catalogue URL and run strict-empty Prism `/setup`. Adapter
+discovery must report `CATALOGUE_VALID`. No workflow may push `main`, force-push
+a publication branch, enable auto-merge, or merge its own pull request.
 
 ## Release changes and revocations
 

@@ -1047,7 +1047,7 @@ prism-tool commit create --type fix --scope actions --subject "isolate protected
 - Consumes: protected environment and command names established in Tasks 3–4.
 - Produces: operator policy for provisioning, offline recovery, succession, exposure response, and Core-first rotation.
 
-- [ ] **Step 1: Write failing documentation contract tests**
+- [x] **Step 1: Write failing documentation contract tests**
 
 Append to `test/documentation.test.js` and add a `security` read:
 
@@ -1075,13 +1075,13 @@ test('documents protected signing custody and recovery', () => {
 });
 ```
 
-- [ ] **Step 2: Run the documentation test to verify Red**
+- [x] **Step 2: Run the documentation test to verify Red**
 
 Run: `node --test test/documentation.test.js`
 
 Expected: FAIL because the documents still prescribe human local production signing.
 
-- [ ] **Step 3: Update domain context**
+- [x] **Step 3: Update domain context**
 
 Add this glossary row to `CONTEXT.md`:
 
@@ -1103,7 +1103,7 @@ Add these invariants under a new `### Protected Signing Environment` entity:
 
 Under **This repository delegates**, expand GitHub’s line to include protected-environment secret storage and ephemeral runners. Do not add implementation paths to `CONTEXT.md`.
 
-- [ ] **Step 4: Replace human-only production instructions**
+- [x] **Step 4: Replace human-only production instructions**
 
 In `README.md`, replace `## Sign as the human key custodian` and its command block with `## Protected production signing`. State:
 
@@ -1126,7 +1126,7 @@ Rewrite `SECURITY.md` around these exact rules:
 6. Suspected exposure disables `CATALOGUE_SIGNING_ENABLED`, stops publication, releases a Core trust-root rotation, waits for propagation, replaces both environment secrets, and only then resumes signing.
 7. Loss without a usable offline recovery copy follows the same Core-first rotation; the catalogue cannot revoke its own key.
 
-- [ ] **Step 5: Run documentation and full tests**
+- [x] **Step 5: Run documentation and full tests**
 
 Run: `node --test test/documentation.test.js`
 
@@ -1136,7 +1136,7 @@ Run: `npm test`
 
 Expected: PASS with only synthetic keys and no local production-signing command.
 
-- [ ] **Step 6: Run final local verification**
+- [x] **Step 6: Run final local verification**
 
 Run: `git status --short`
 
@@ -1156,7 +1156,7 @@ Expected: PASS.
 
 The finishing workflow must then run `/check` and the approved four-axis `code-review` before preparing the pull request. It must not push.
 
-- [ ] **Step 7: Create the terminal implementation commit**
+- [x] **Step 7: Create the terminal implementation commit**
 
 Run `git add CONTEXT.md README.md SECURITY.md test/documentation.test.js`, then load `conventional-commits` and run this as the sole command in its assistant batch:
 
