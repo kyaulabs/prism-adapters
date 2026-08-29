@@ -25,22 +25,6 @@ const sourceValue = {
     }],
 };
 
-function registryResponse(overrides = {}) {
-    const body = JSON.stringify({
-        versions: {
-            '0.4.1': {dist: {integrity}},
-        },
-        time: {
-            '0.4.1': '2026-08-27T12:00:00.000Z',
-        },
-        ...overrides,
-    });
-    return new Response(body, {
-        status: 200,
-        headers: {'content-length': String(Buffer.byteLength(body))},
-    });
-}
-
 test('hydrates a deterministic six-day catalogue from allowlisted npm metadata', async () => {
     const requests = [];
     const source = readCatalogueSource(sourceValue);
@@ -48,17 +32,19 @@ test('hydrates a deterministic six-day catalogue from allowlisted npm metadata',
         source,
         sequence: 1,
         now: new Date('2026-08-28T00:00:00.000Z'),
-        fetchImpl: async (url, options) => {
-            requests.push({url, options});
-            return registryResponse();
+        npmEvidence: async (request) => {
+            requests.push(request);
+            return {
+                integrity,
+                publishedAt: '2026-08-27T12:00:00.000Z',
+            };
         },
     });
 
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0].url,
-        'https://registry.npmjs.org/%40kyaulabs%2Fprism-php-web');
-    assert.equal(requests[0].options.redirect, 'manual');
-    assert.equal(requests[0].options.credentials, 'omit');
+    assert.deepEqual(requests, [{
+        packageName: '@kyaulabs/prism-php-web',
+        version: '0.4.1',
+    }]);
     assert.deepEqual(payload, {
         schemaVersion: 1,
         catalogueId: 'kyaulabs/prism-adapters',
@@ -79,19 +65,6 @@ test('hydrates a deterministic six-day catalogue from allowlisted npm metadata',
             }],
         }],
     });
-});
-
-test('rejects missing npm integrity', async () => {
-    const source = readCatalogueSource(sourceValue);
-    await assert.rejects(
-        hydrateCatalogue({
-            source,
-            sequence: 1,
-            now: new Date('2026-08-28T00:00:00.000Z'),
-            fetchImpl: async () => registryResponse({versions: {'0.4.1': {dist: {}}}}),
-        }),
-        /npm release metadata is invalid/,
-    );
 });
 
 test('rejects expired payloads', () => {

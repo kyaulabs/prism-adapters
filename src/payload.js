@@ -1,12 +1,11 @@
 // $KYAULabs: payload.js kyau@aura.kyaulabs 2026/08/28 -0700 Exp $
 
 import {readCatalogueSource} from './catalogue-source.js';
+import {resolveNpmReleaseEvidence} from './npm-evidence.js';
 import {CATALOGUE_ID} from './public-key.js';
 
 export {readCatalogueSource};
 
-const REGISTRY_ORIGIN = 'https://registry.npmjs.org';
-const MAX_REGISTRY_BYTES = 4 * 1024 * 1024;
 const SIX_DAYS = 6 * 24 * 60 * 60 * 1000;
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -37,65 +36,6 @@ function timestamp(value) {
         throw new Error('catalogue timestamp is invalid');
     }
     return parsed;
-}
-
-async function responseBytes(response) {
-    if (!response || response.status !== 200 || response.redirected === true) {
-        throw new Error('npm release metadata is unavailable');
-    }
-    const declared = response.headers?.get?.('content-length');
-    if (declared !== null && declared !== undefined &&
-        (!/^\d+$/.test(declared) || Number(declared) > MAX_REGISTRY_BYTES)) {
-        throw new Error('npm release metadata is invalid');
-    }
-    let bytes;
-    try {
-        bytes = Buffer.from(await response.arrayBuffer());
-    } catch {
-        throw new Error('npm release metadata is unavailable');
-    }
-    if (bytes.length === 0 || bytes.length > MAX_REGISTRY_BYTES) {
-        throw new Error('npm release metadata is invalid');
-    }
-    return bytes;
-}
-
-async function fetchPackageMetadata({packageName, version, fetchImpl}) {
-    const url = `${REGISTRY_ORIGIN}/${encodeURIComponent(packageName)}`;
-    let response;
-    try {
-        response = await fetchImpl(url, {
-            method: 'GET',
-            redirect: 'manual',
-            credentials: 'omit',
-            cache: 'no-store',
-            referrerPolicy: 'no-referrer',
-            headers: {
-                accept: 'application/json',
-                'user-agent': '@kyaulabs/prism-adapters-catalogue',
-            },
-            signal: AbortSignal.timeout(10_000),
-        });
-    } catch {
-        throw new Error('npm release metadata is unavailable');
-    }
-    const bytes = await responseBytes(response);
-    let packument;
-    try {
-        packument = JSON.parse(bytes.toString('utf8'));
-    } catch {
-        throw new Error('npm release metadata is invalid');
-    }
-    const integrity = packument?.versions?.[version]?.dist?.integrity;
-    const rawPublishedAt = packument?.time?.[version];
-    const parsedPublishedAt = new Date(rawPublishedAt);
-    if (!canonicalIntegrity(integrity) || !Number.isFinite(parsedPublishedAt.getTime())) {
-        throw new Error('npm release metadata is invalid');
-    }
-    return Object.freeze({
-        integrity,
-        publishedAt: parsedPublishedAt.toISOString(),
-    });
 }
 
 export function validateCataloguePayload({
@@ -156,20 +96,28 @@ export function validateCataloguePayload({
     return Object.freeze(value);
 }
 
-export async function hydrateCatalogue({source, sequence, now = new Date(), fetchImpl = fetch}) {
+export async function hydrateCatalogue({
+    source,
+    sequence,
+    now = new Date(),
+    npmEvidence,
+    fetchImpl = globalThis.fetch,
+}) {
     if (!Number.isSafeInteger(sequence) || sequence <= 0) {
         throw new Error('catalogue sequence is invalid');
     }
+    const evidenceBoundary = typeof npmEvidence === 'function'
+        ? npmEvidence
+        : (request) => resolveNpmReleaseEvidence({...request, fetchImpl});
     const current = new Date(now);
     if (!Number.isFinite(current.getTime())) throw new Error('catalogue clock is invalid');
     const adapters = [];
     for (const adapter of source.adapters) {
         const releases = [];
         for (const release of adapter.releases) {
-            const metadata = await fetchPackageMetadata({
+            const metadata = await evidenceBoundary({
                 packageName: adapter.packageName,
                 version: release.version,
-                fetchImpl,
             });
             releases.push({...release, ...metadata});
         }

@@ -176,7 +176,7 @@ prism-tool commit create --type fix --scope catalogue --subject "derive determin
 - Produces: `resolveNpmReleaseEvidence({packageName, version, fetchImpl, sleepImpl}) -> Promise<{integrity, publishedAt}>`.
 - `hydrateCatalogue({source, sequence, now, npmEvidence})` consumes an injected `npmEvidence({packageName, version})`; the CLI later supplies the real npm boundary.
 
-- [ ] **Step 1: Write failing bounded-transport and npm tests**
+- [x] **Step 1: Write failing bounded-transport and npm tests**
 
 Create table-driven tests that assert:
 
@@ -213,13 +213,13 @@ assert.equal(calls[0].options.credentials, 'omit');
 
 Also cover: invalid package/version rejected before fetch; redirect; malformed or oversized `content-length`; streamed body crossing 4 MiB without `content-length`; empty/invalid JSON; missing exact version; malformed/noncanonical SHA-512; invalid publication time; retry exhaustion after exactly three attempts; and no retry for invalid evidence.
 
-- [ ] **Step 2: Run tests to verify Red**
+- [x] **Step 2: Run tests to verify Red**
 
 Run: `node --test test/evidence-http.test.js test/npm-evidence.test.js`
 
 Expected: FAIL with missing `src/evidence-http.js` and `src/npm-evidence.js` modules.
 
-- [ ] **Step 3: Implement bounded JSON and exact npm evidence**
+- [x] **Step 3: Implement bounded JSON and exact npm evidence**
 
 `requestBoundedJson` must request with `redirect: 'manual'`, `credentials: 'omit'`, `cache: 'no-store'`, `referrerPolicy: 'no-referrer'`, fixed headers, and `AbortSignal.timeout(10_000)`. Reject `response.redirected`, all 3xx responses, invalid/oversized declared lengths, empty bodies, and bodies over the supplied maximum. Read `response.body` incrementally with `getReader()` and cancel immediately when the bound is exceeded; use `arrayBuffer()` only for fake responses without a readable stream and recheck the final length. Parse JSON once and return inert data.
 
@@ -227,13 +227,13 @@ Expected: FAIL with missing `src/evidence-http.js` and `src/npm-evidence.js` mod
 
 Change `hydrateCatalogue` to require `npmEvidence` and call it for every exact release. Remove direct network behavior from `src/payload.js`; its responsibility becomes deterministic payload assembly and payload validation.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run: `node --test test/evidence-http.test.js test/npm-evidence.test.js test/payload.test.js`
 
 Expected: PASS; retry tests report exactly three attempts, invalid evidence reports one attempt, and payload hydration uses only the injected npm function.
 
-- [ ] **Step 5: Create the commit**
+- [x] **Step 5: Create the commit**
 
 ```bash
 git add src/evidence-http.js src/npm-evidence.js src/payload.js test/evidence-http.test.js test/npm-evidence.test.js test/payload.test.js
