@@ -251,7 +251,7 @@ prism-tool commit create --type fix --scope evidence --subject "bound exact npm 
 - The repository and origin are constants: `kyaulabs/prism` and `https://api.github.com`.
 - `adapters` uses catalogue-source shape and contains no registry URL, integrity, publication time, command, credential, sequence, branch, or payload bytes.
 
-- [ ] **Step 1: Write the failing fake-GitHub contract tests**
+- [x] **Step 1: Write the failing fake-GitHub contract tests**
 
 Build a fake fetch keyed by exact request URL for:
 
@@ -296,13 +296,13 @@ const packageManifest = {
 
 Assert the normalized result contains only repository/version/commit and catalogue-source adapter records. Add one table case per fail-closed state: malformed trigger version/SHA, draft/prerelease Release, wrong Release tag or target commit, mutable/annotated/wrong release tag ref, commit mismatch or non-merge commit, release configuration unknown field/schema/owner/policy, escaping or undeclared package path, declaration unknown field/duplicate ID/invalid range/status/protocol, private or wrong-name/version/non-adapter manifest, package tag type/SHA mismatch, redirect, oversized content response, unavailable evidence, and unexpected request.
 
-- [ ] **Step 2: Run the focused test to verify Red**
+- [x] **Step 2: Run the focused test to verify Red**
 
 Run: `node --test test/github-evidence.test.js`
 
 Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `src/github-evidence.js`.
 
-- [ ] **Step 3: Implement independent GitHub evidence agreement**
+- [x] **Step 3: Implement independent GitHub evidence agreement**
 
 Use `requestBoundedJson` for every request with GitHub API headers and a 4 MiB response limit; use 64 KiB for decoded `.prism/release.json` and 1 MiB for decoded package manifests. Validate lowercase 40-hex commit input and strict stable SemVer before any request.
 
@@ -312,13 +312,13 @@ Decode GitHub content responses only when `type === 'file'`, `encoding === 'base
 
 Normalize each declaration to one catalogue-source release. Pass the complete normalized source shape through `readCatalogueSource` before returning it.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run: `node --test test/github-evidence.test.js test/evidence-http.test.js test/catalogue-source.test.js`
 
 Expected: PASS with every mismatch rejected before normalized release evidence is returned.
 
-- [ ] **Step 5: Create the commit**
+- [x] **Step 5: Create the commit**
 
 ```bash
 git add src/github-evidence.js test/github-evidence.test.js
