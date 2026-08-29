@@ -160,7 +160,7 @@ prism-tool commit create --type fix --scope signing --subject "preserve exact ca
 - Consumes: `createEnvelopeFromPayloadBytes`, `verifyEnvelope`, `loadTrustedPublicKey`, `EXPECTED_PUBLIC_KEY_SHA256`, `KEY_ID`, and bounded files.
 - Produces: `readBoundedPrivateFile({filePath, maximum}) -> Promise<Buffer>`, `writePublicFileAtomically({filePath, bytes}) -> Promise<void>`, and `signProtectedCatalogue(options) -> Promise<{sequence, envelopeDigest, payloadDigest}>`.
 
-- [ ] **Step 1: Write failing private-file boundary tests**
+- [x] **Step 1: Write failing private-file boundary tests**
 
 Append to `test/safe-file.test.js` and extend its imports with `chmod`, `readFile`, and the new functions:
 
@@ -207,13 +207,13 @@ test('does not delete a pre-existing atomic-write collision', async () => {
 });
 ```
 
-- [ ] **Step 2: Run the safe-file tests to verify Red**
+- [x] **Step 2: Run the safe-file tests to verify Red**
 
 Run: `node --test test/safe-file.test.js`
 
 Expected: FAIL because the private read and atomic write functions do not exist.
 
-- [ ] **Step 3: Implement private reads and cleanup-safe atomic writes**
+- [x] **Step 3: Implement private reads and cleanup-safe atomic writes**
 
 Refactor `src/safe-file.js` to this complete implementation:
 
@@ -290,13 +290,13 @@ export async function writePublicFileAtomically({filePath, bytes}) {
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
 ```
 
-- [ ] **Step 4: Run the safe-file tests to verify Green**
+- [x] **Step 4: Run the safe-file tests to verify Green**
 
 Run: `node --test test/safe-file.test.js`
 
 Expected: PASS.
 
-- [ ] **Step 5: Write the protected-signer tests**
+- [x] **Step 5: Write the protected-signer tests**
 
 Create `test/protected-signing.test.js` with synthetic-only fixtures. The file must generate an encrypted Ed25519 PKCS#8 key and separate passphrase file under a temporary directory, then cover this matrix:
 
@@ -435,13 +435,13 @@ test('failed envelope reverification leaves no public output', async () => {
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
 ```
 
-- [ ] **Step 6: Run the signer tests to verify Red**
+- [x] **Step 6: Run the signer tests to verify Red**
 
 Run: `node --test test/protected-signing.test.js`
 
 Expected: FAIL because `src/protected-signing.js` does not exist.
 
-- [ ] **Step 7: Implement the protected signer**
+- [x] **Step 7: Implement the protected signer**
 
 Create `src/protected-signing.js`:
 
@@ -546,13 +546,13 @@ export async function signProtectedCatalogue({
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
 ```
 
-- [ ] **Step 8: Run the signer and full focused boundary tests**
+- [x] **Step 8: Run the signer and full focused boundary tests**
 
 Run: `node --test test/safe-file.test.js test/envelope.test.js test/protected-signing.test.js`
 
 Expected: PASS for success and every fail-closed case; no failed case leaves `catalogue.json` or `catalogue.json.new`.
 
-- [ ] **Step 9: Create the commit**
+- [x] **Step 9: Create the commit**
 
 Run `git add src/envelope.js src/protected-signing.js src/safe-file.js test/envelope.test.js test/protected-signing.test.js test/safe-file.test.js`, then load `conventional-commits` and run this as the sole command in its assistant batch:
 
