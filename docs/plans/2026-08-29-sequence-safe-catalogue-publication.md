@@ -630,7 +630,7 @@ prism-tool commit create --type fix --scope actions --subject "automate sequence
 - Consumes: the workflow, variable, secret, branch, and PR contract from Tasks 1–5.
 - Produces: operator-facing provisioning, least-privilege, review, recovery, succession, and activation instructions.
 
-- [ ] **Step 1: Write failing documentation contract tests**
+- [x] **Step 1: Write failing documentation contract tests**
 
 Extend `test/documentation.test.js` to require:
 
@@ -641,13 +641,13 @@ Extend `test/documentation.test.js` to require:
 - All documents prohibit protected-branch writes, force push, merge, auto-merge, corrective close, and local production publication.
 - `package.json` has the two new runner-only scripts and no local publish command.
 
-- [ ] **Step 2: Run documentation tests to verify Red**
+- [x] **Step 2: Run documentation tests to verify Red**
 
 Run: `node --test test/documentation.test.js`
 
 Expected: FAIL because issue #5 is still described as future work.
 
-- [ ] **Step 3: Update domain and operator documentation**
+- [x] **Step 3: Update domain and operator documentation**
 
 Update `CONTEXT.md` without implementation paths:
 
@@ -666,7 +666,7 @@ Update `README.md` with exact human provisioning steps:
 
 Update `SECURITY.md` so suspected App-key exposure disables `CATALOGUE_SIGNING_ENABLED`, revokes/replaces the App key, reviews installation/repository grants and audit logs, and re-enables only after synthetic and protected readiness checks. Keep catalogue signing-key exposure on the separate Core-first trust-root rotation path.
 
-- [ ] **Step 4: Run final verification**
+- [x] **Step 4: Run final verification**
 
 Run: `node --test test/documentation.test.js`
 
@@ -686,7 +686,7 @@ Expected: no secret/token/debug match; any policy/test match for forbidden opera
 
 The finishing workflow must run `/check`, four-axis `code-review`, and preparation-only `/pr`. It must never push or mutate GitHub.
 
-- [ ] **Step 5: Create the terminal implementation commit**
+- [x] **Step 5: Create the terminal implementation commit**
 
 Run `git add CONTEXT.md README.md SECURITY.md test/documentation.test.js`, then load `conventional-commits` and run as the sole command in its assistant batch:
 

@@ -90,11 +90,22 @@ success or failure.
 
 Human administrators create the `catalogue-signing` environment, restrict its
 deployment branches to `main`, and add separate environment secrets named
-`CATALOGUE_SIGNING_PRIVATE_KEY` and `CATALOGUE_SIGNING_PASSPHRASE`. Keep the
-repository-level Actions variable `CATALOGUE_SIGNING_ENABLED` absent or `false`
-until issue #5 and the activation task have passed review. A human later
-manages that variable under **Repository Settings → Secrets and variables →
-Actions → Variables**; code and agents never set it.
+`CATALOGUE_SIGNING_PRIVATE_KEY` and `CATALOGUE_SIGNING_PASSPHRASE`. The same
+environment stores `CATALOGUE_PUBLICATION_APP_PRIVATE_KEY` for a dedicated
+GitHub App installed only on `kyaulabs/prism-adapters`. Configure its numeric
+App ID as the repository Actions variable `CATALOGUE_PUBLICATION_APP_ID`.
+
+The App installation grants repository contents and pull-request write access,
+but no merge, administration, release, or npm authority. Each run narrows its
+one-hour installation token to `prism-adapters` with only contents and
+pull-request write permissions. Workflow `GITHUB_TOKEN` permissions remain
+read-only.
+
+Keep the repository-level Actions variable `CATALOGUE_SIGNING_ENABLED` absent
+or `false` until the environment, App installation, credentials, workflow, and
+retention policy have passed review. A human manages that variable under
+**Repository Settings → Secrets and variables → Actions → Variables**; code
+and agents never set it.
 
 GitHub cannot reveal stored secret values. Keep an offline encrypted-key
 recovery copy and protect the passphrase separately. Re-provision lost GitHub
@@ -102,23 +113,40 @@ copies from those sources. A successor receives repository/environment
 administration and signing custody through an explicit out-of-band handoff.
 See `SECURITY.md` for exposure and Core-first rotation procedures.
 
-The issue #4 readiness workflow prepares a renewal, signs it, and verifies the
-public envelope on an ephemeral runner. It does not upload signing state, push
-a branch, write `main`, or open or merge a pull request. Issue #5 owns the
-sequence-safe publication branch and human-merged pull-request transaction.
+## Automated publication
+
+A repository dispatch after a stable Prism release, the three-day renewal
+schedule, and explicit manual recovery all enter the same non-cancelling
+transaction. Each run validates the trigger and public evidence with:
+
+```bash
+npm run catalogue:prepare-trigger
+```
+
+The protected job recomputes that evidence, signs and reverifies the exact
+payload, then invokes the runner-only publication command:
+
+```bash
+npm run catalogue:publish-protected
+```
+
+The command mints a repository- and permission-narrowed App installation token,
+rechecks remote `main`, and creates one immutable `catalogue/sequence-<n>`
+branch plus one pull request. Exact partial state is idempotent or recoverable;
+a stale base, different bytes, invalid signature, conflicting sequence, or
+another open publication pull request fails closed.
+
+Manual recovery accepts `renewal` or `release`. Release recovery also requires
+the stable version and immutable Prism merge commit. It cannot supply sequence,
+branch, package, compatibility, registry, or payload authority.
 
 ## Verify and publish
 
-Until issue #5 lands and production activation is reviewed, the protected job
-remains disabled and no automated publication occurs. The later publication
-transaction will include only the deterministic `catalogue-source.json` and
-public signed `catalogue.json` in a sequence-specific branch and will require a
-human merge.
-
 After a human merges a publication pull request to `main`, verify HTTP `200` at
 the fixed raw catalogue URL and run strict-empty Prism `/setup`. Adapter
-discovery must report `CATALOGUE_VALID`. No workflow may push `main`, force-push
-a publication branch, enable auto-merge, or merge its own pull request.
+discovery must report `CATALOGUE_VALID`. Automation never writes protected
+`main`, updates or force-pushes a publication branch, closes a conflicting pull
+request, enables auto-merge, or merges its own pull request.
 
 ## Release changes and revocations
 
@@ -129,8 +157,8 @@ commit. Package identity and version come from its validated manifest; integrity
 and publication time come from exact npm metadata. The publisher never uses an
 npm dist-tag such as `latest`.
 
-Re-run the complete evidence preparation, human sign, verify, review, and publish
-sequence for every release update or renewal.
+Every release update and renewal recomputes the complete evidence, signing,
+verification, and publication transaction from current authority.
 
 Key rotation requires a Prism Core release that trusts the replacement public
 key before this publisher signs with the replacement private key.

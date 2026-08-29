@@ -54,6 +54,14 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 - Produces no secret-bearing argument, log, output, summary, artifact, cache, fixture, or local state.
 - Remains activation-gated until human maintainers provision the environment, bound Actions log retention, and offline recovery custody.
 
+### Catalogue Publication Transaction
+
+- All release dispatch, three-day renewal, and manual recovery runs share one non-cancelling transaction.
+- Each run binds the next sequence, deterministic source, signed envelope, and publication intent to an attested `main` commit, then rechecks that base before publication.
+- A sequence branch is immutable after atomic creation. Automation never updates or force-pushes it.
+- Only exact partial branch or pull-request state is recoverable; conflicting bytes, base, signature, sequence, or open publication state fails closed.
+- A repository-narrowed GitHub App token creates only the sequence branch and pull request. Human maintainers review and merge every publication pull request.
+
 ### Failure Boundary
 
 - Evidence failure or retry exhaustion produces no prepared signing payload and performs no signing or Git mutation.
@@ -72,9 +80,9 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 ### This repository delegates
 
 - **Prism Core** — release-managed package configuration, adapter release declarations, stable Release and package-tag production, and minimal dispatch.
-- **GitHub** — immutable repository evidence, environment-scoped secret storage, ephemeral Actions runners, protected Actions environments, and human-reviewed pull requests.
+- **GitHub** — immutable repository evidence, environment-scoped secret storage, ephemeral Actions runners, protected Actions environments, narrowed App installation tokens, and human-reviewed pull requests.
 - **npm** — exact public package integrity and publication-time evidence; npm publication remains human-owned.
-- **Human maintainers** — review and merge every catalogue publication pull request.
+- **Human maintainers** — administer signing and App credentials, review automation authority and succession, and merge every catalogue publication pull request.
 
 ### Boundary interfaces
 
