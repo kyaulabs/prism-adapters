@@ -301,7 +301,7 @@ async function repository() {
 test('prepare-release preserves verified records and adds exact release evidence', async () => {
     const {cwd, key} = await evidenceRepository();
     const stdout = output();
-    await run(['prepare-release', '0.4.2', mergeCommit], {
+    const result = await run(['prepare-release', '0.4.2', mergeCommit], {
         cwd,
         expectedFingerprint: key.fingerprint,
         now: new Date('2026-08-28T00:00:00.000Z'),
@@ -321,6 +321,12 @@ test('prepare-release preserves verified records and adds exact release evidence
         'utf8',
     ));
     assert.equal(prepared.sequence, 8);
+    assert.deepEqual(result, {
+        sequence: 8,
+        payloadDigest: createHash('sha256')
+            .update(await readFile(path.join(cwd, '.publisher', 'payload.json')))
+            .digest('hex'),
+    });
     assert.equal(prepared.adapters[0].releases[0].integrity, integrity);
     assert.equal(prepared.adapters[0].releases[1].integrity, nextIntegrity);
     assert.match(stdout.value(), /prepared release 0[.]4[.]2 catalogue sequence 8/);
@@ -331,7 +337,7 @@ test('prepare-release preserves verified records and adds exact release evidence
 test('prepare-renewal preserves source policy and revalidates exact npm releases', async () => {
     const {cwd, key} = await evidenceRepository();
     let npmRequests = 0;
-    await run(['prepare-renewal'], {
+    const result = await run(['prepare-renewal'], {
         cwd,
         expectedFingerprint: key.fingerprint,
         now: new Date('2026-08-28T00:00:00.000Z'),
@@ -358,6 +364,12 @@ test('prepare-renewal preserves source policy and revalidates exact npm releases
         'utf8',
     ));
     assert.equal(prepared.sequence, 8);
+    assert.deepEqual(result, {
+        sequence: 8,
+        payloadDigest: createHash('sha256')
+            .update(await readFile(path.join(cwd, '.publisher', 'payload.json')))
+            .digest('hex'),
+    });
     assert.equal(prepared.adapters[0].releases[0].integrity, integrity);
     assert.equal(npmRequests, 1);
 });

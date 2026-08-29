@@ -167,7 +167,7 @@ export async function run(args, {
             `prepared renewal catalogue sequence ${payload.sequence} digest ${digest} ` +
             `expires ${payload.expiresAt}\n`,
         );
-        return;
+        return Object.freeze({sequence: payload.sequence, payloadDigest: digest});
     }
     if (command === 'prepare-release') {
         const existingBytes = await readRegularFile(cataloguePath);
@@ -206,7 +206,7 @@ export async function run(args, {
             `prepared release ${evidence.version} catalogue sequence ${payload.sequence} ` +
             `digest ${digest} expires ${payload.expiresAt}\n`,
         );
-        return;
+        return Object.freeze({sequence: payload.sequence, payloadDigest: digest});
     }
 }
 

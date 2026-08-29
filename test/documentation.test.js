@@ -45,4 +45,34 @@ test('documents protected signing custody and recovery', () => {
     );
 });
 
+test('documents sequence-safe App-backed publication', () => {
+    assert.match(context, /sequence branch.*immutable/i);
+    assert.match(context, /exact.*recover/i);
+    assert.match(context, /human.*merge/i);
+    assert.match(readme, /repository dispatch/i);
+    assert.match(readme, /three-day renewal/i);
+    assert.match(readme, /manual recovery/i);
+    assert.match(readme, /CATALOGUE_PUBLICATION_APP_ID/);
+    assert.match(readme, /CATALOGUE_PUBLICATION_APP_PRIVATE_KEY/);
+    assert.match(readme, /catalogue:prepare-trigger/);
+    assert.match(readme, /catalogue:publish-protected/);
+    assert.match(readme, /contents.*pull-request write/is);
+    assert.match(readme, /GITHUB_TOKEN.*read-only/is);
+    assert.match(security, /one hour/i);
+    assert.match(security, /opaque/i);
+    assert.match(security, /App.*succession/is);
+    assert.match(security, /App.*exposure/is);
+    assert.match(security, /separate.*Ed25519/is);
+    assert.doesNotMatch(readme, /workflow may push `main`/);
+    assert.equal(
+        manifest.scripts['catalogue:prepare-trigger'],
+        'node src/trigger-runner.js',
+    );
+    assert.equal(
+        manifest.scripts['catalogue:publish-protected'],
+        'node src/publication-runner.js',
+    );
+    assert.equal(manifest.scripts['catalogue:publish'], undefined);
+});
+
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
