@@ -334,7 +334,7 @@ prism-tool commit create --type fix --scope publication --subject "model sequenc
 - Consumes: synthetic or protected RSA App private-key bytes, numeric App ID, fixed repository state, source/envelope bytes, deterministic PR title/body, and injected `fetchImpl`/clock.
 - Produces: `mintPublisherToken({appId, privateKeyBytes, fetchImpl, now}) -> Promise<{token, expiresAt}>`; `publishCatalogueCandidate({token, intent, sourceBytes, envelopeBytes, title, body, fetchImpl}) -> Promise<{state, branchName, pullRequestNumber}>`.
 
-- [ ] **Step 1: Write failing App-token tests**
+- [x] **Step 1: Write failing App-token tests**
 
 Generate a synthetic RSA key in `test/github-publication.test.js`. Decode the JWT payload received by the fake fetch and assert numeric `iss`, `iat = now - 60`, `exp = now + 540`, and a valid RSA-SHA256 signature. Assert requests occur in this order:
 
@@ -357,13 +357,13 @@ Assert the token request body is exactly:
 
 Accept an opaque non-empty token without a length assumption and require an RFC3339 expiry later than `now` and no more than one hour ahead. Reject malformed App IDs, non-RSA keys, redirects, oversized/empty/non-JSON responses, wrong repository installation, absent permissions, overbroad returned permissions, missing repository selection, expired tokens, and unexpected status codes.
 
-- [ ] **Step 2: Run token tests to verify Red**
+- [x] **Step 2: Run token tests to verify Red**
 
 Run: `node --test --test-name-pattern='installation token' test/github-publication.test.js`
 
 Expected: FAIL because `src/github-publication.js` does not exist.
 
-- [ ] **Step 3: Implement token minting with built-ins**
+- [x] **Step 3: Implement token minting with built-ins**
 
 Create `src/github-publication.js` with fixed API origin and version headers:
 
@@ -375,7 +375,7 @@ const USER_AGENT = '@kyaulabs/prism-adapters-catalogue';
 
 Build the JWT with base64url header `{"alg":"RS256","typ":"JWT"}`, the exact timestamps above, numeric App ID, and `node:crypto.sign('RSA-SHA256', ...)`. Use guarded `fetch` with `redirect: 'manual'`, `credentials: 'omit'`, `cache: 'no-store'`, `referrerPolicy: 'no-referrer'`, `AbortSignal.timeout(10_000)`, bounded 4 MiB JSON reads, exact expected statuses, and generic errors. Never log or return the JWT. Return only the opaque installation token and expiry to the caller.
 
-- [ ] **Step 4: Write failing remote-inspection and mutation tests**
+- [x] **Step 4: Write failing remote-inspection and mutation tests**
 
 Using a queued fake fetch, cover:
 
@@ -391,7 +391,7 @@ Using a queued fake fetch, cover:
 
 Reject redirects, pagination beyond one bounded page, malformed content, extra changed files, multiple commits, wrong parent/base, wrong PR state, unrecognized response fields required for authority, and any non-race mutation failure. Assert no request uses `PATCH`, `PUT`, `DELETE`, merge, update-ref, force, or protected `main` mutation endpoints.
 
-- [ ] **Step 5: Implement inspection and publication**
+- [x] **Step 5: Implement inspection and publication**
 
 Implement `publishCatalogueCandidate()` as a maximum-three-transition loop:
 
@@ -414,7 +414,7 @@ throw new Error('catalogue publication state is ambiguous');
 
 `createSequenceBranch()` must re-read `main` after creating Git objects but before `POST /git/refs`; stale main throws and leaves only unreachable Git objects, never a visible branch. Treat only `422` from ref or PR creation as a race requiring reinspection. All other mutation responses fail immediately.
 
-- [ ] **Step 6: Run focused and full tests**
+- [x] **Step 6: Run focused and full tests**
 
 Run: `node --test test/github-publication.test.js test/publication-state.test.js`
 
@@ -424,7 +424,7 @@ Run: `npm test`
 
 Expected: PASS.
 
-- [ ] **Step 7: Create the commit**
+- [x] **Step 7: Create the commit**
 
 Run `git add src/github-publication.js test/github-publication.test.js`, then load `conventional-commits` and run as the sole command in its assistant batch:
 
