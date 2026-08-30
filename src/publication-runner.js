@@ -1,7 +1,6 @@
 // $KYAULabs: publication-runner.js kyau@aura.kyaulabs 2026/08/29 -0700 Exp $
 
 import {createHash} from 'node:crypto';
-import {rm} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -11,19 +10,13 @@ import {
     sourceFromVerifiedCatalogue,
 } from './catalogue-source.js';
 import {verifyEnvelope} from './envelope.js';
-import {
-    mintPublisherToken,
-    publishCatalogueCandidate,
-} from './github-publication.js';
+import {publishCatalogueCandidate} from './github-publication.js';
 import {publicationBranch} from './publication-state.js';
 import {
     EXPECTED_PUBLIC_KEY_SHA256,
     loadTrustedPublicKey,
 } from './public-key.js';
-import {
-    readBoundedPrivateFile,
-    readBoundedRegularFile,
-} from './safe-file.js';
+import {readBoundedRegularFile} from './safe-file.js';
 
 const REPOSITORY = 'kyaulabs/prism-adapters';
 const DEFAULT_REF = 'refs/heads/main';
@@ -48,7 +41,6 @@ function trustedRunner({cwd, env}) {
         env.GITHUB_WORKFLOW_REF === WORKFLOW_REF &&
         EVENTS.has(env.GITHUB_EVENT_NAME) &&
         env.CATALOGUE_SIGNING_ENVIRONMENT === 'catalogue-signing' &&
-        env.CATALOGUE_SIGNING_ENABLED === 'true' &&
         env.RUNNER_DEBUG !== '1' &&
         env.ACTIONS_STEP_DEBUG !== 'true' &&
         env.ACTIONS_RUNNER_DEBUG !== 'true' &&
@@ -124,19 +116,12 @@ export async function runProtectedPublication({
     stdout = process.stdout,
     now = new Date(),
     expectedFingerprint = EXPECTED_PUBLIC_KEY_SHA256,
-    tokenImpl = mintPublisherToken,
     publishImpl = publishCatalogueCandidate,
     fetchImpl = globalThis.fetch,
 } = {}) {
-    let appDirectory = null;
-    let privateKeyBytes;
     try {
         if (!trustedRunner({cwd, env})) {
             throw new Error('protected publication runner is not trusted');
-        }
-        appDirectory = path.join(env.RUNNER_TEMP, 'prism-catalogue-publication');
-        if (!/^[1-9]\d{0,15}$/.test(env.APP_ID ?? '')) {
-            throw new Error('protected catalogue publication App ID is invalid');
         }
         const [sourceBytes, envelopeBytes, triggerBytes, publicKey] = await Promise.all([
             readBoundedRegularFile({
@@ -180,20 +165,13 @@ export async function runProtectedPublication({
             sourceDigest: sha256(sourceBytes),
             envelopeDigest: verified.envelopeDigest,
         });
-        privateKeyBytes = await readBoundedPrivateFile({
-            filePath: path.join(appDirectory, 'app.pem'),
-            maximum: 65_536,
-        });
-        const installation = await tokenImpl({
-            appId: env.APP_ID,
-            privateKeyBytes,
-            fetchImpl,
-            now,
-        });
-        privateKeyBytes.fill(0);
-        privateKeyBytes = undefined;
+        if (typeof env.CATALOGUE_PUBLICATION_TOKEN !== 'string' ||
+            env.CATALOGUE_PUBLICATION_TOKEN.length === 0 ||
+            env.CATALOGUE_PUBLICATION_TOKEN.length > 4096) {
+            throw new Error('protected catalogue publication credential is invalid');
+        }
         const result = await publishImpl({
-            token: installation.token,
+            token: env.CATALOGUE_PUBLICATION_TOKEN,
             intent,
             sourceBytes,
             envelopeBytes,
@@ -210,11 +188,6 @@ export async function runProtectedPublication({
         if (error instanceof Error &&
             error.message === 'protected publication runner is not trusted') throw error;
         throw new Error('protected catalogue publication failed', {cause: error});
-    } finally {
-        privateKeyBytes?.fill(0);
-        if (appDirectory !== null) {
-            await rm(appDirectory, {recursive: true, force: true}).catch(() => {});
-        }
     }
 }
 

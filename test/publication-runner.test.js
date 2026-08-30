@@ -18,11 +18,8 @@ function sha256(bytes) {
 async function fixture() {
     const cwd = await mkdtemp(path.join(tmpdir(), 'prism-publication-runner-'));
     const runnerTemp = await mkdtemp(path.join(tmpdir(), 'prism-publication-secrets-'));
-    const appDirectory = path.join(runnerTemp, 'prism-catalogue-publication');
     await mkdir(path.join(cwd, '.publisher'), {mode: 0o700});
-    await mkdir(appDirectory, {mode: 0o700});
     const signing = generateKeyPairSync('ed25519');
-    const app = generateKeyPairSync('rsa', {modulusLength: 2048});
     const publicDer = signing.publicKey.export({type: 'spki', format: 'der'});
     const fingerprint = sha256(publicDer);
     const payload = {
@@ -70,14 +67,9 @@ async function fixture() {
             mergeCommit: 'b'.repeat(40),
         },
     })}\n`);
-    await writeFile(path.join(appDirectory, 'app.pem'), app.privateKey.export({
-        type: 'pkcs8',
-        format: 'pem',
-    }), {mode: 0o600});
     return {
         cwd,
         runnerTemp,
-        appDirectory,
         fingerprint,
         sourceBytes,
         envelopeBytes,
@@ -91,24 +83,13 @@ async function fixture() {
             GITHUB_WORKFLOW_REF: 'kyaulabs/prism-adapters/.github/workflows/catalogue-signing.yml@refs/heads/main',
             RUNNER_TEMP: runnerTemp,
             CATALOGUE_SIGNING_ENVIRONMENT: 'catalogue-signing',
-            CATALOGUE_SIGNING_ENABLED: 'true',
-            APP_ID: '12345',
+            CATALOGUE_PUBLICATION_TOKEN: 'opaque-synthetic-publication-credential',
         },
     };
 }
 
-async function appSecretAbsent(directory) {
-    await assert.rejects(readFile(path.join(directory, 'app.pem')), /ENOENT/);
-}
-
-async function appSecretPresent(directory) {
-    assert.match(await readFile(path.join(directory, 'app.pem'), 'utf8'),
-        /BEGIN PRIVATE KEY/);
-}
-
 test('reverifies and publishes only the fixed protected catalogue candidate', async () => {
     const value = await fixture();
-    let tokenInput;
     let publication;
     let output = '';
 
@@ -118,10 +99,6 @@ test('reverifies and publishes only the fixed protected catalogue candidate', as
         now: new Date('2026-08-29T00:00:00.000Z'),
         expectedFingerprint: value.fingerprint,
         stdout: {write: (chunk) => { output += chunk; }},
-        tokenImpl: async (input) => {
-            tokenInput = input;
-            return {token: 'opaque-synthetic-token', expiresAt: '2026-08-29T01:00:00.000Z'};
-        },
         publishImpl: async (input) => {
             publication = input;
             return {
@@ -132,8 +109,6 @@ test('reverifies and publishes only the fixed protected catalogue candidate', as
         },
     });
 
-    assert.equal(tokenInput.appId, '12345');
-    assert.ok(Buffer.isBuffer(tokenInput.privateKeyBytes));
     assert.deepEqual(publication.intent, {
         baseSha: value.baseSha,
         sequence: 8,
@@ -143,7 +118,7 @@ test('reverifies and publishes only the fixed protected catalogue candidate', as
     });
     assert.deepEqual(publication.sourceBytes, value.sourceBytes);
     assert.deepEqual(publication.envelopeBytes, value.envelopeBytes);
-    assert.equal(publication.token, 'opaque-synthetic-token');
+    assert.equal(publication.token, 'opaque-synthetic-publication-credential');
     assert.equal(publication.title, 'chore(catalogue): publish sequence 8');
     assert.match(publication.body, /Sequence: 8/);
     assert.match(publication.body, /Base commit: `a{40}`/);
@@ -156,7 +131,7 @@ test('reverifies and publishes only the fixed protected catalogue candidate', as
         pullRequestNumber: 17,
     });
     assert.equal(output, 'published catalogue sequence 8 branch catalogue/sequence-8 PR #17 state IDEMPOTENT\n');
-    await appSecretAbsent(value.appDirectory);
+    assert.doesNotMatch(output, /opaque-synthetic-publication-credential/);
 });
 
 for (const [name, change] of [
@@ -166,9 +141,8 @@ for (const [name, change] of [
         GITHUB_WORKFLOW_REF: 'kyaulabs/prism-adapters/.github/workflows/other.yml@refs/heads/main',
     }],
     ['debug logging', {RUNNER_DEBUG: '1'}],
-    ['disabled activation', {CATALOGUE_SIGNING_ENABLED: 'false'}],
 ]) {
-    test(`rejects ${name} before token minting`, async () => {
+    test(`rejects ${name} before publication`, async () => {
         const value = await fixture();
         let called = false;
 
@@ -178,16 +152,15 @@ for (const [name, change] of [
             now: new Date('2026-08-29T00:00:00.000Z'),
             expectedFingerprint: value.fingerprint,
             stdout: {write: () => {}},
-            tokenImpl: async () => {
+            publishImpl: async () => {
                 called = true;
             },
         }), /protected publication runner is not trusted/);
         assert.equal(called, false);
-        await appSecretPresent(value.appDirectory);
     });
 }
 
-test('rejects mismatched trigger and signed output before token minting', async () => {
+test('rejects mismatched trigger and signed output before publication', async () => {
     const value = await fixture();
     const triggerPath = path.join(value.cwd, '.publisher', 'trigger.json');
     const trigger = JSON.parse(await readFile(triggerPath, 'utf8'));
@@ -201,32 +174,30 @@ test('rejects mismatched trigger and signed output before token minting', async 
         now: new Date('2026-08-29T00:00:00.000Z'),
         expectedFingerprint: value.fingerprint,
         stdout: {write: () => {}},
-        tokenImpl: async () => {
+        publishImpl: async () => {
             called = true;
         },
     }), /protected catalogue publication failed/);
     assert.equal(called, false);
-    await appSecretAbsent(value.appDirectory);
 });
 
-test('cleans App material when publication fails', async () => {
+test('rejects an absent publication credential before publication', async () => {
     const value = await fixture();
+    const env = {...value.env};
+    delete env.CATALOGUE_PUBLICATION_TOKEN;
+    let called = false;
 
     await assert.rejects(runProtectedPublication({
         cwd: value.cwd,
-        env: value.env,
+        env,
         now: new Date('2026-08-29T00:00:00.000Z'),
         expectedFingerprint: value.fingerprint,
         stdout: {write: () => {}},
-        tokenImpl: async () => ({
-            token: 'opaque-synthetic-token',
-            expiresAt: '2026-08-29T01:00:00.000Z',
-        }),
         publishImpl: async () => {
-            throw new Error('synthetic publication conflict');
+            called = true;
         },
     }), /protected catalogue publication failed/);
-    await appSecretAbsent(value.appDirectory);
+    assert.equal(called, false);
 });
 
 // vim: ft=javascript sts=4 sw=4 ts=4 et :

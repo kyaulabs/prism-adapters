@@ -21,7 +21,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 | renewal | A transaction that preserves the verified current release set, revalidates every exact npm release, and prepares a fresh validity window without discovering or removing releases. |
 | deterministic catalogue source | The complete unsigned source policy rendered solely from validated release evidence and preserved verified records. |
 | catalogue publication transaction | The serialized cross-repository workflow that validates evidence, signs the next sequence in the protected publisher environment, and opens a human-merged publication pull request. |
-| protected signing environment | The dedicated GitHub Actions environment that exposes separate encrypted-key and passphrase secrets only to trusted default-branch catalogue signing code. |
+| protected signing environment | The dedicated GitHub Actions environment that exposes separate encrypted-key, passphrase, and publication secrets only to trusted default-branch catalogue signing and publication code. |
 
 ## Entities and Invariants
 
@@ -60,7 +60,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 - Each run binds the next sequence, deterministic source, signed envelope, and publication intent to an attested `main` commit, then rechecks that base before publication.
 - A sequence branch is immutable after atomic creation. Automation never updates or force-pushes it.
 - Only exact partial branch or pull-request state is recoverable; conflicting bytes, base, signature, sequence, or open publication state fails closed.
-- A repository-narrowed GitHub App token creates only the sequence branch and pull request. Human maintainers review and merge every publication pull request.
+- A fine-grained PAT owned by `kyaulabs-bot`, limited to `kyaulabs/prism-adapters` with Contents write and Pull Requests write, creates only the sequence branch and pull request. It has no Actions write permission. Human maintainers review and merge every publication pull request.
 
 ### Failure Boundary
 
@@ -80,9 +80,9 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 ### This repository delegates
 
 - **Prism Core** — release-managed package configuration, adapter release declarations, stable Release and package-tag production, and minimal dispatch.
-- **GitHub** — immutable repository evidence, environment-scoped secret storage, ephemeral Actions runners, protected Actions environments, narrowed App installation tokens, and human-reviewed pull requests.
+- **GitHub** — immutable repository evidence, environment-scoped secret storage, ephemeral Actions runners, protected Actions environments, fine-grained PAT enforcement, and human-reviewed pull requests.
 - **npm** — exact public package integrity and publication-time evidence; npm publication remains human-owned.
-- **Human maintainers** — administer signing and App credentials, review automation authority and succession, and merge every catalogue publication pull request.
+- **Human maintainers** — administer signing credentials and the publication PAT, review automation authority and succession, and merge every catalogue publication pull request.
 
 ### Boundary interfaces
 
@@ -103,6 +103,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 ## Architectural Decisions
 
 - `adr/0001-adopt-prism-catalogue-publication-authority.md` — adopt the immutable Prism publication specification and ADRs as this publisher's authority while keeping issue #3 bounded to evidence resolution and deterministic source rendering.
+- `adr/0002-use-direct-pat-for-catalogue-publication.md` — use a protected, repository-scoped fine-grained PAT for publication authentication.
 
 ## When to Update This File
 
