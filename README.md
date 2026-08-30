@@ -163,4 +163,20 @@ verification, and publication transaction from current authority.
 Key rotation requires a Prism Core release that trusts the replacement public
 key before this publisher signs with the replacement private key.
 
+## Repository automation
+
+The continuous integration workflow runs the locked Node test suite for pushes
+and pull requests targeting `develop` and `main`.
+
+After a pull request is merged into `main`, the back-merge workflow opens one
+`main` to `develop` back-merge pull request when synchronization is needed.
+Human review and merge remain required; automation never pushes or merges
+either protected branch.
+
+A repository administrator must enable **Settings → Actions → General →
+Workflow permissions → Allow GitHub Actions to create and approve pull
+requests**. This setting permits pull-request creation; the workflow itself
+does not approve pull requests and receives only read-only contents plus
+pull-request write authority.
+
 <!-- vim: ft=markdown sts=4 sw=4 ts=4 et : -->
