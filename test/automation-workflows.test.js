@@ -8,6 +8,10 @@ const ciWorkflow = await readFile(
     new URL('../.github/workflows/ci.yml', import.meta.url),
     'utf8',
 );
+const backMergeWorkflow = await readFile(
+    new URL('../.github/workflows/back-merge.yml', import.meta.url),
+    'utf8',
+);
 
 test('CI tests pushes and pull requests for both protected branches', () => {
     assert.match(ciWorkflow, /^on:\n  push:\n    branches: \[develop, main\]/m);
@@ -40,6 +44,48 @@ test('CI has no secret, publication, artifact, cache, or mutation surface', () =
     assert.doesNotMatch(ciWorkflow, /secrets[.]|contents: write|pull-requests: write/);
     assert.doesNotMatch(ciWorkflow, /upload-artifact|actions\/cache|cache:/);
     assert.doesNotMatch(ciWorkflow, /catalogue:|git push|gh |curl |wget /);
+});
+
+test('back-merge runs only after a pull request is merged into main', () => {
+    assert.match(backMergeWorkflow, /^on:\n  pull_request:\n    branches: \[main\]\n    types: \[closed\]/m);
+    assert.match(backMergeWorkflow, /github[.]event[.]pull_request[.]merged == true/);
+    assert.match(backMergeWorkflow, /group: back-merge-main-to-develop/);
+    assert.match(backMergeWorkflow, /cancel-in-progress: false/);
+});
+
+test('back-merge has only read and pull-request creation authority', () => {
+    assert.match(
+        backMergeWorkflow,
+        /^permissions:\n  contents: read\n  pull-requests: write/m,
+    );
+    assert.match(backMergeWorkflow, /GH_TOKEN: \$\{\{ secrets[.]GITHUB_TOKEN \}\}/);
+    assert.doesNotMatch(backMergeWorkflow, /actions\/checkout|contents: write/);
+});
+
+test('back-merge compares exact refs and creates only the intended pull request', () => {
+    assert.match(backMergeWorkflow, /compare\/develop[.][.][.]main/);
+    assert.match(
+        backMergeWorkflow,
+        /gh pr list --repo "\$GITHUB_REPOSITORY"[\s\\]+--base develop --head main --state open/,
+    );
+    assert.match(
+        backMergeWorkflow,
+        /gh pr create --repo "\$GITHUB_REPOSITORY" --base develop --head main/,
+    );
+    assert.match(backMergeWorkflow, /--title "Back-merge main into develop"/);
+    assert.match(backMergeWorkflow, /Human review and merge required[.]/);
+    assert.match(backMergeWorkflow, /case "\$ahead_by" in/);
+    assert.match(backMergeWorkflow, /case "\$open_count" in/);
+});
+
+test('back-merge fails closed and has no integration authority', () => {
+    assert.doesNotMatch(
+        backMergeWorkflow,
+        /git push|update-ref|force.push|gh pr merge|gh pr close|gh pr review|auto.merge/,
+    );
+    assert.doesNotMatch(backMergeWorkflow, /eval|source |bash -c|sh -c/);
+    assert.match(backMergeWorkflow, /pull-request creation failed/);
+    assert.match(backMergeWorkflow, /created concurrently; nothing to do/);
 });
 
 // vim: ft=javascript sts=4 sw=4 ts=4 et :

@@ -75,4 +75,11 @@ test('documents sequence-safe App-backed publication', () => {
     assert.equal(manifest.scripts['catalogue:publish'], undefined);
 });
 
+test('documents CI and automatic human-merged back-merges', () => {
+    assert.match(readme, /pushes\s+and pull requests targeting `develop` and `main`/);
+    assert.match(readme, /Allow GitHub Actions to create and approve pull\s+requests/);
+    assert.match(readme, /`main` to `develop` back-merge pull request/);
+    assert.match(readme, /Human review and merge remain required/);
+});
+
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
