@@ -1,0 +1,76 @@
+// $KYAULabs: workflow.test.js kyau@aura.kyaulabs 2026/08/28 -0700 Exp $
+
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import test from 'node:test';
+
+const workflow = await readFile(
+    new URL('../.github/workflows/catalogue-signing.yml', import.meta.url),
+    'utf8',
+);
+
+test('all trusted triggers share one non-cancelling publication transaction', () => {
+    assert.match(workflow, /^on:\n  repository_dispatch:\n    types: \[prism-release-published\]/m);
+    assert.match(workflow, /  schedule:\n    - cron: '0 6 [*] [*] [*]'/);
+    assert.match(workflow, /  workflow_dispatch:\n    inputs:\n      mode:/);
+    assert.match(workflow, /options:\n          - renewal\n          - release/);
+    assert.match(workflow, /      version:\n        type: string/);
+    assert.match(workflow, /      merge_commit:\n        type: string/);
+    assert.match(workflow, /group: catalogue-publication/);
+    assert.match(workflow, /cancel-in-progress: false/);
+    assert.doesNotMatch(workflow, /pull_request_target|workflow_call/);
+});
+
+test('separates signing and App credentials behind read-only workflow permissions', () => {
+    assert.equal((workflow.match(/secrets[.]CATALOGUE_SIGNING_PRIVATE_KEY/g) ?? []).length, 1);
+    assert.equal((workflow.match(/secrets[.]CATALOGUE_SIGNING_PASSPHRASE/g) ?? []).length, 1);
+    assert.equal((workflow.match(/secrets[.]CATALOGUE_PUBLICATION_APP_PRIVATE_KEY/g) ?? []).length, 1);
+    assert.equal((workflow.match(/vars[.]CATALOGUE_PUBLICATION_APP_ID/g) ?? []).length, 1);
+    assert.equal((workflow.match(/npm run catalogue:prepare-trigger/g) ?? []).length, 2);
+    assert.equal((workflow.match(/id: preparation/g) ?? []).length, 2);
+    assert.equal((workflow.match(
+        /if: steps[.]preparation[.]outputs[.]publication_ready == 'true'/g,
+    ) ?? []).length, 2);
+    assert.match(workflow, /needs: synthetic-validation/);
+    assert.match(workflow, /environment: catalogue-signing/);
+    assert.match(workflow, /permissions:\n\s+contents: read/);
+    assert.doesNotMatch(workflow, /pull-requests: write|contents: write/);
+    assert.match(
+        workflow,
+        /actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/,
+    );
+    assert.match(
+        workflow,
+        /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020/,
+    );
+    assert.match(workflow, /persist-credentials: false/);
+    assert.match(workflow, /ref: \$\{\{ github[.]sha \}\}/);
+});
+
+test('workflow disables tracing, uses separate private files, and always cleans', () => {
+    assert.match(workflow, /if: runner[.]debug == '1'/);
+    assert.match(workflow, /set \+x/);
+    assert.match(workflow, /umask 077/);
+    assert.match(workflow, /trap 'rm -rf -- "\$secret_directory"' EXIT HUP INT TERM/);
+    assert.match(workflow, /trap 'rm -rf -- "\$app_directory"' EXIT HUP INT TERM/);
+    assert.match(workflow, /if: always[(][)]/);
+    assert.match(workflow, /npm run catalogue:sign-protected/);
+    assert.match(workflow, /npm run catalogue:verify/);
+    assert.match(workflow, /npm run catalogue:publish-protected/);
+});
+
+test('workflow permits only the bounded App-backed publication command', () => {
+    assert.doesNotMatch(
+        workflow,
+        /upload-artifact|actions\/cache|cache:|GITHUB_STEP_SUMMARY/,
+    );
+    assert.doesNotMatch(workflow, /GITHUB_OUTPUT/);
+    assert.doesNotMatch(
+        workflow,
+        /git push|gh pr|update-ref|force.push|auto.merge|merge pull|close pull/,
+    );
+    assert.doesNotMatch(workflow, /permissions:\n(?:.|\n)*?contents: write/);
+    assert.equal((workflow.match(/npm run catalogue:publish-protected/g) ?? []).length, 1);
+});
+
+// vim: ft=javascript sts=4 sw=4 ts=4 et :

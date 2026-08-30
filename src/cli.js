@@ -1,6 +1,6 @@
 // $KYAULabs: cli.js kyau@aura.kyaulabs 2026/08/28 -0700 Exp $
 
-import {createHash, createPrivateKey} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import {constants} from 'node:fs';
 import {
     lstat,
@@ -10,72 +10,26 @@ import {
     rename,
     writeFile,
 } from 'node:fs/promises';
-import {homedir} from 'node:os';
 import path from 'node:path';
-import {createInterface} from 'node:readline/promises';
+import {setTimeout as sleep} from 'node:timers/promises';
 import {pathToFileURL} from 'node:url';
 
-import {createEnvelope, verifyEnvelope} from './envelope.js';
-import {hydrateCatalogue, readCatalogueSource, validateCataloguePayload} from './payload.js';
+import {
+    applyReleaseEvidence,
+    renderCatalogueSource,
+    sourceFromVerifiedCatalogue,
+} from './catalogue-source.js';
+import {verifyEnvelope} from './envelope.js';
+import {resolvePrismReleaseEvidence} from './github-evidence.js';
+import {resolveNpmReleaseEvidence} from './npm-evidence.js';
+import {hydrateCatalogue} from './payload.js';
 import {
     EXPECTED_PUBLIC_KEY_SHA256,
     loadTrustedPublicKey,
 } from './public-key.js';
 import {readBoundedRegularFile} from './safe-file.js';
-import {readHiddenLine} from './secret-prompt.js';
 
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
-const MAX_PRIVATE_KEY_BYTES = 65_536;
-const ENCRYPTED_PKCS8_LABEL = Buffer.from('-----BEGIN ENCRYPTED PRIVATE KEY-----');
-const HOME_PREFIXES = ['${HOME}/', '$HOME/', '~/'];
-const MAX_PRIVATE_KEY_PATH_BYTES = 4096;
-
-async function confirmPayloadDigest({stdin, stdout, digest}) {
-    const prompt = createInterface({input: stdin, output: stdout});
-    try {
-        const answer = await prompt.question(
-            `Confirm prepared payload digest ${digest} matches prepare output (yes/no): `,
-        );
-        return answer.trim() === 'yes';
-    } finally {
-        prompt.close();
-    }
-}
-
-async function promptForPrivateKeyPath({stdin, stdout}) {
-    const prompt = createInterface({input: stdin, output: stdout});
-    try {
-        return await prompt.question(
-            'Private signing key path (must be outside this repository): ',
-        );
-    } finally {
-        prompt.close();
-    }
-}
-
-function resolvePrivateKeyPath({cwd, supplied, homeDirectory}) {
-    if (typeof supplied !== 'string' || supplied.trim() === '' ||
-        Buffer.byteLength(supplied) > MAX_PRIVATE_KEY_PATH_BYTES ||
-        /[\u0000-\u001f\u007f]/.test(supplied)) {
-        throw new Error('private signing key was not supplied');
-    }
-    const value = supplied.trim();
-    for (const prefix of HOME_PREFIXES) {
-        if (value.startsWith(prefix)) {
-            return path.resolve(homeDirectory, value.slice(prefix.length));
-        }
-    }
-    if (value.startsWith('~') || value.startsWith('$')) {
-        throw new Error('private signing key path uses unsupported expansion');
-    }
-    return path.resolve(cwd, value);
-}
-
-function encryptedPkcs8(bytes) {
-    return bytes.length >= ENCRYPTED_PKCS8_LABEL.length &&
-        bytes.subarray(0, ENCRYPTED_PKCS8_LABEL.length).equals(ENCRYPTED_PKCS8_LABEL);
-}
-
 async function readRegularFile(filePath, maximum = MAX_JSON_BYTES) {
     try {
         return await readBoundedRegularFile({filePath, maximum});
@@ -84,18 +38,6 @@ async function readRegularFile(filePath, maximum = MAX_JSON_BYTES) {
             throw new Error('required publisher file is unavailable');
         }
         throw new Error('publisher file must be a bounded regular non-symlink file');
-    }
-}
-
-async function readOptionalFile(filePath) {
-    try {
-        return await readBoundedRegularFile({
-            filePath,
-            maximum: MAX_JSON_BYTES,
-        });
-    } catch (error) {
-        if (error.cause?.code === 'ENOENT') return null;
-        throw new Error('optional publisher file cannot be inspected');
     }
 }
 
@@ -140,86 +82,40 @@ async function atomicWrite(filePath, bytes, mode = 0o644) {
     await rename(temporary, filePath);
 }
 
-async function loadPrivateSigningKey({
-    cwd,
-    stdin,
-    stdout,
-    homeDirectory,
-    privateKeyPathPrompt,
-    passphrasePrompt,
-}) {
-    if (!stdin?.isTTY || !stdout?.isTTY) {
-        throw new Error('signing requires the human key custodian in an interactive terminal');
-    }
-    const supplied = await privateKeyPathPrompt({stdin, stdout});
-    let repositoryRoot;
-    let stat;
-    let bytes;
+async function persistPreparation({cwd, workDirectory, source, payload}) {
+    const sourceBytes = Buffer.from(renderCatalogueSource(source), 'utf8');
+    const payloadBytes = Buffer.from(`${JSON.stringify(payload)}\n`, 'utf8');
+    const work = await openPrivateWorkDirectory({workDirectory, create: true});
     try {
-        repositoryRoot = await realpath(cwd);
-        const suppliedPath = resolvePrivateKeyPath({cwd, supplied, homeDirectory});
-        stat = await lstat(suppliedPath);
-        if (stat.isSymbolicLink() || !stat.isFile() || stat.size === 0 ||
-            stat.size > MAX_PRIVATE_KEY_BYTES) {
-            throw new Error('invalid-file');
-        }
-        const keyPath = await realpath(suppliedPath);
-        const relative = path.relative(repositoryRoot, keyPath);
-        if (relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..')) {
-            throw new Error('inside-repository');
-        }
-        bytes = await readBoundedRegularFile({
-            filePath: suppliedPath,
-            maximum: MAX_PRIVATE_KEY_BYTES,
-        });
-    } catch {
-        throw new Error('private signing key is unavailable or inside the repository');
-    }
-    let passphrase = null;
-    let privateKey;
-    try {
-        if (encryptedPkcs8(bytes)) {
-            passphrase = await passphrasePrompt({
-                stdin,
-                stdout,
-                prompt: 'Private signing key passphrase: ',
-            });
-            if (!Buffer.isBuffer(passphrase) || passphrase.length === 0) {
-                throw new Error('private signing key is invalid');
-            }
-        }
-        try {
-            privateKey = passphrase === null
-                ? createPrivateKey(bytes)
-                : createPrivateKey({key: bytes, format: 'pem', passphrase});
-        } catch {
-            throw new Error('private signing key is invalid');
-        }
+        await atomicWrite(path.join(cwd, 'catalogue-source.json'), sourceBytes);
+        await atomicWrite(
+            path.join(work.descriptorPath, 'payload.json'),
+            payloadBytes,
+            0o600,
+        );
     } finally {
-        bytes.fill(0);
-        passphrase?.fill(0);
+        await work.handle.close();
     }
-    if (privateKey.asymmetricKeyType !== 'ed25519') {
-        throw new Error('private signing key must use Ed25519');
-    }
-    return privateKey;
+    return createHash('sha256').update(payloadBytes).digest('hex');
 }
 
 export async function run(args, {
     cwd = process.cwd(),
     expectedFingerprint = EXPECTED_PUBLIC_KEY_SHA256,
-    fetchImpl = globalThis.fetch,
+    githubFetchImpl = globalThis.fetch,
+    npmFetchImpl = globalThis.fetch,
+    sleepImpl = sleep,
     now = new Date(),
-    stdin = process.stdin,
     stdout = process.stdout,
-    homeDirectory = homedir(),
-    privateKeyPathPrompt = promptForPrivateKeyPath,
-    passphrasePrompt = readHiddenLine,
-    payloadConfirmationPrompt = confirmPayloadDigest,
 } = {}) {
-    if (!Array.isArray(args) || args.length !== 1 ||
-        !['check-key', 'prepare', 'sign', 'verify'].includes(args[0])) {
-        throw new Error('unknown command; use check-key, prepare, sign, or verify');
+    const simpleCommand = Array.isArray(args) && args.length === 1 &&
+        ['check-key', 'prepare-renewal', 'verify'].includes(args[0]);
+    const releaseCommand = Array.isArray(args) && args.length === 3 &&
+        args[0] === 'prepare-release';
+    if (!simpleCommand && !releaseCommand) {
+        throw new Error(
+            'unknown command; use check-key, prepare-release, prepare-renewal, or verify',
+        );
     }
     const publicKeyPath = path.join(cwd, 'adapter-catalogue-public.pem');
     const publicKey = await loadTrustedPublicKey({
@@ -242,86 +138,76 @@ export async function run(args, {
         return;
     }
     const workDirectory = path.join(cwd, '.publisher');
-    if (command === 'prepare') {
-        const sourceBytes = await readRegularFile(path.join(cwd, 'catalogue-source.json'));
-        let sourceValue;
-        try {
-            sourceValue = JSON.parse(sourceBytes.toString('utf8'));
-        } catch {
-            throw new Error('catalogue source is invalid JSON');
-        }
-        const source = readCatalogueSource(sourceValue);
-        const existing = await readOptionalFile(cataloguePath);
-        const sequence = existing === null ? 1 : verifyEnvelope({
-            bytes: existing,
+    if (command === 'prepare-renewal') {
+        const existingBytes = await readRegularFile(cataloguePath);
+        const verified = verifyEnvelope({
+            bytes: existingBytes,
             publicKey,
             now,
             allowExpired: true,
-        }).catalogue.sequence + 1;
+        });
+        const source = sourceFromVerifiedCatalogue(verified.catalogue);
         const payload = await hydrateCatalogue({
             source,
-            sequence,
+            sequence: verified.catalogue.sequence + 1,
             now,
-            fetchImpl,
+            npmEvidence: (request) => resolveNpmReleaseEvidence({
+                ...request,
+                fetchImpl: npmFetchImpl,
+                sleepImpl,
+            }),
         });
-        const payloadBytes = Buffer.from(`${JSON.stringify(payload)}\n`);
-        const work = await openPrivateWorkDirectory({workDirectory, create: true});
-        try {
-            await atomicWrite(
-                path.join(work.descriptorPath, 'payload.json'),
-                payloadBytes,
-                0o600,
-            );
-        } finally {
-            await work.handle.close();
-        }
-        const digest = createHash('sha256').update(payloadBytes).digest('hex');
+        const digest = await persistPreparation({
+            cwd,
+            workDirectory,
+            source,
+            payload,
+        });
         stdout.write(
-            `prepared catalogue sequence ${payload.sequence} digest ${digest} ` +
+            `prepared renewal catalogue sequence ${payload.sequence} digest ${digest} ` +
             `expires ${payload.expiresAt}\n`,
         );
-        return;
+        return Object.freeze({sequence: payload.sequence, payloadDigest: digest});
     }
-    if (!stdin?.isTTY || !stdout?.isTTY) {
-        throw new Error('signing requires the human key custodian in an interactive terminal');
-    }
-    const work = await openPrivateWorkDirectory({workDirectory, create: false});
-    let payloadBytes;
-    try {
-        payloadBytes = await readRegularFile(
-            path.join(work.descriptorPath, 'payload.json'),
+    if (command === 'prepare-release') {
+        const existingBytes = await readRegularFile(cataloguePath);
+        const verified = verifyEnvelope({
+            bytes: existingBytes,
+            publicKey,
+            now,
+            allowExpired: true,
+        });
+        const evidence = await resolvePrismReleaseEvidence({
+            version: args[1],
+            mergeCommit: args[2],
+            fetchImpl: githubFetchImpl,
+        });
+        const source = applyReleaseEvidence({
+            current: verified.catalogue,
+            evidence,
+        });
+        const payload = await hydrateCatalogue({
+            source,
+            sequence: verified.catalogue.sequence + 1,
+            now,
+            npmEvidence: (request) => resolveNpmReleaseEvidence({
+                ...request,
+                fetchImpl: npmFetchImpl,
+                sleepImpl,
+            }),
+        });
+        const digest = await persistPreparation({
+            cwd,
+            workDirectory,
+            source,
+            payload,
+        });
+        stdout.write(
+            `prepared release ${evidence.version} catalogue sequence ${payload.sequence} ` +
+            `digest ${digest} expires ${payload.expiresAt}\n`,
         );
-    } finally {
-        await work.handle.close();
+        return Object.freeze({sequence: payload.sequence, payloadDigest: digest});
     }
-    let payload;
-    try {
-        payload = JSON.parse(payloadBytes.toString('utf8'));
-    } catch {
-        throw new Error('prepared catalogue payload is invalid JSON');
-    }
-    validateCataloguePayload({value: payload, now});
-    const digest = createHash('sha256').update(payloadBytes).digest('hex');
-    stdout.write(`prepared payload digest ${digest}\n`);
-    const confirmed = await payloadConfirmationPrompt({stdin, stdout, digest});
-    if (confirmed !== true) {
-        throw new Error('prepared payload digest was not confirmed');
-    }
-    const privateKey = await loadPrivateSigningKey({
-        cwd,
-        stdin,
-        stdout,
-        homeDirectory,
-        privateKeyPathPrompt,
-        passphrasePrompt,
-    });
-    const envelopeBytes = createEnvelope({payload, privateKey, publicKey});
-    await atomicWrite(cataloguePath, envelopeBytes);
-    const verified = verifyEnvelope({bytes: envelopeBytes, publicKey, now});
-    stdout.write(
-        `signed catalogue sequence ${verified.catalogue.sequence} ` +
-        `digest ${verified.envelopeDigest}\n`,
-    );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

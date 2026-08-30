@@ -1,10 +1,14 @@
 // $KYAULabs: envelope.test.js kyau@aura.kyaulabs 2026/08/28 -0700 Exp $
 
 import assert from 'node:assert/strict';
-import {generateKeyPairSync} from 'node:crypto';
+import {createHash, generateKeyPairSync} from 'node:crypto';
 import test from 'node:test';
 
-import {createEnvelope, verifyEnvelope} from '../src/envelope.js';
+import {
+    createEnvelope,
+    createEnvelopeFromPayloadBytes,
+    verifyEnvelope,
+} from '../src/envelope.js';
 
 const integrity = `sha512-${Buffer.alloc(64, 11).toString('base64')}`;
 const payload = {
@@ -41,6 +45,29 @@ test('creates an envelope that verifies with the matching public key', () => {
     assert.equal(verified.keyId, 'kyaulabs-prism-adapters-2026-01');
     assert.match(verified.envelopeDigest, /^[0-9a-f]{64}$/);
     assert.equal(bytes.at(-1), 0x0a);
+});
+
+test('signs and preserves the exact prepared payload bytes', () => {
+    const {privateKey, publicKey} = generateKeyPairSync('ed25519');
+    const payloadBytes = Buffer.from(`${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+
+    const bytes = createEnvelopeFromPayloadBytes({
+        payloadBytes,
+        privateKey,
+        publicKey,
+    });
+    const envelope = JSON.parse(bytes.toString('utf8'));
+    const verified = verifyEnvelope({
+        bytes,
+        publicKey,
+        now: new Date('2026-08-28T00:00:00.000Z'),
+    });
+
+    assert.deepEqual(Buffer.from(envelope.payload, 'base64'), payloadBytes);
+    assert.equal(
+        verified.payloadDigest,
+        createHash('sha256').update(payloadBytes).digest('hex'),
+    );
 });
 
 test('rejects a private key that does not match the trusted public key', () => {
