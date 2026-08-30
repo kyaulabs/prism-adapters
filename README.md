@@ -82,30 +82,28 @@ npm run catalogue:sign-protected
 ```
 
 It rejects local execution, pull requests, reusable workflows, non-`main`
-refs, dispatch-selected code, debug runners, and disabled activation before
-reading signing files. It requires an encrypted PKCS#8 Ed25519 key, matches the
-committed Core SPKI fingerprint and key ID, signs the exact prepared payload
+refs, dispatch-selected code, and debug runners before reading signing files.
+It requires an encrypted PKCS#8 Ed25519 key, matches the committed Core SPKI
+fingerprint and key ID, signs the exact prepared payload
 bytes, reverifies the envelope, and removes runner-private secret files on
 success or failure.
 
 Human administrators create the `catalogue-signing` environment, restrict its
 deployment branches to `main`, and add separate environment secrets named
-`CATALOGUE_SIGNING_PRIVATE_KEY` and `CATALOGUE_SIGNING_PASSPHRASE`. The same
-environment stores `CATALOGUE_PUBLICATION_APP_PRIVATE_KEY` for a dedicated
-GitHub App installed only on `kyaulabs/prism-adapters`. Configure its numeric
-App ID as the repository Actions variable `CATALOGUE_PUBLICATION_APP_ID`.
+`CATALOGUE_SIGNING_PRIVATE_KEY`, `CATALOGUE_SIGNING_PASSPHRASE`, and
+`CATALOGUE_PUBLICATION_TOKEN`.
 
-The App installation grants repository contents and pull-request write access,
-but no merge, administration, release, or npm authority. Each run narrows its
-one-hour installation token to `prism-adapters` with only contents and
-pull-request write permissions. Workflow `GITHUB_TOKEN` permissions remain
+The publication secret is a fine-grained PAT owned by `kyaulabs-bot`, with
+resource owner `kyaulabs`. Limit access to only `kyaulabs/prism-adapters`.
+Grant Contents write and Pull Requests write only;
+it has no Actions write permission. Workflow `GITHUB_TOKEN` permissions remain
 read-only.
 
-Keep the repository-level Actions variable `CATALOGUE_SIGNING_ENABLED` absent
-or `false` until the environment, App installation, credentials, workflow, and
-retention policy have passed review. A human manages that variable under
-**Repository Settings → Secrets and variables → Actions → Variables**; code
-and agents never set it.
+The protected publication command receives the PAT only as an opaque
+environment value after signing and reverification. It does not write the value
+to a file or include it in arguments, logs, outputs, summaries, artifacts, or
+caches. Human administrators review the environment, credential scope,
+workflow, and retention policy before allowing production runs.
 
 GitHub cannot reveal stored secret values. Keep an offline encrypted-key
 recovery copy and protect the passphrase separately. Re-provision lost GitHub
@@ -117,7 +115,8 @@ See `SECURITY.md` for exposure and Core-first rotation procedures.
 
 A repository dispatch after a stable Prism release, a daily schedule with a
 verified three-day renewal gate, and explicit manual recovery all enter the
-same non-cancelling transaction. Each run validates the trigger and public evidence with:
+same non-cancelling transaction. Each run validates the trigger and public
+evidence with:
 
 ```bash
 npm run catalogue:prepare-trigger
@@ -130,9 +129,10 @@ payload, then invokes the runner-only publication command:
 npm run catalogue:publish-protected
 ```
 
-The command mints a repository- and permission-narrowed App installation token,
-rechecks remote `main`, and creates one immutable `catalogue/sequence-<n>`
-branch plus one pull request. Exact partial state is idempotent or recoverable;
+The command passes the opaque protected publication credential only to the fixed
+repository API, rechecks remote `main`, and creates one immutable
+`catalogue/sequence-<n>` branch plus one pull request. Exact partial state is
+idempotent or recoverable;
 a stale base, different bytes, invalid signature, conflicting sequence, or
 another open publication pull request fails closed.
 
