@@ -21,11 +21,12 @@ test('all trusted triggers share one non-cancelling publication transaction', ()
     assert.doesNotMatch(workflow, /pull_request_target|workflow_call/);
 });
 
-test('separates signing and App credentials behind read-only workflow permissions', () => {
+test('separates signing and publication credentials behind read-only workflow permissions', () => {
     assert.equal((workflow.match(/secrets[.]CATALOGUE_SIGNING_PRIVATE_KEY/g) ?? []).length, 1);
     assert.equal((workflow.match(/secrets[.]CATALOGUE_SIGNING_PASSPHRASE/g) ?? []).length, 1);
-    assert.equal((workflow.match(/secrets[.]CATALOGUE_PUBLICATION_APP_PRIVATE_KEY/g) ?? []).length, 1);
-    assert.equal((workflow.match(/vars[.]CATALOGUE_PUBLICATION_APP_ID/g) ?? []).length, 1);
+    assert.equal((workflow.match(/secrets[.]CATALOGUE_PUBLICATION_TOKEN/g) ?? []).length, 1);
+    assert.doesNotMatch(workflow, /CATALOGUE_SIGNING_ENABLED/);
+    assert.doesNotMatch(workflow, /CATALOGUE_PUBLICATION_APP|APP_ID|APP_PRIVATE_KEY/);
     assert.equal((workflow.match(/npm run catalogue:prepare-trigger/g) ?? []).length, 2);
     assert.equal((workflow.match(/id: preparation/g) ?? []).length, 2);
     assert.equal((workflow.match(
@@ -47,19 +48,19 @@ test('separates signing and App credentials behind read-only workflow permission
     assert.match(workflow, /ref: \$\{\{ github[.]sha \}\}/);
 });
 
-test('workflow disables tracing, uses separate private files, and always cleans', () => {
+test('workflow disables tracing, uses signing private files, and always cleans', () => {
     assert.match(workflow, /if: runner[.]debug == '1'/);
     assert.match(workflow, /set \+x/);
     assert.match(workflow, /umask 077/);
     assert.match(workflow, /trap 'rm -rf -- "\$secret_directory"' EXIT HUP INT TERM/);
-    assert.match(workflow, /trap 'rm -rf -- "\$app_directory"' EXIT HUP INT TERM/);
+    assert.doesNotMatch(workflow, /app_directory|app[.]pem/);
     assert.match(workflow, /if: always[(][)]/);
     assert.match(workflow, /npm run catalogue:sign-protected/);
     assert.match(workflow, /npm run catalogue:verify/);
     assert.match(workflow, /npm run catalogue:publish-protected/);
 });
 
-test('workflow permits only the bounded App-backed publication command', () => {
+test('workflow permits only the bounded direct publication command', () => {
     assert.doesNotMatch(
         workflow,
         /upload-artifact|actions\/cache|cache:|GITHUB_STEP_SUMMARY/,
