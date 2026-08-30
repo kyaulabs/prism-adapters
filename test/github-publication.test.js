@@ -1,13 +1,10 @@
 // $KYAULabs: github-publication.test.js kyau@aura.kyaulabs 2026/08/29 -0700 Exp $
 
 import assert from 'node:assert/strict';
-import {createHash, generateKeyPairSync, verify} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import test from 'node:test';
 
-import {
-    mintPublisherToken,
-    publishCatalogueCandidate,
-} from '../src/github-publication.js';
+import {publishCatalogueCandidate} from '../src/github-publication.js';
 
 function response(value, {status = 200, headers = {}} = {}) {
     return new Response(JSON.stringify(value), {
@@ -20,108 +17,15 @@ function sha256(bytes) {
     return createHash('sha256').update(bytes).digest('hex');
 }
 
-test('mints a repository- and permission-narrowed installation token', async () => {
-    const {privateKey, publicKey} = generateKeyPairSync('rsa', {modulusLength: 2048});
-    const privateKeyBytes = Buffer.from(privateKey.export({
-        type: 'pkcs8',
-        format: 'pem',
-    }));
-    const requests = [];
-    const now = new Date('2026-08-29T00:00:00.000Z');
-    const fetchImpl = async (url, options) => {
-        requests.push({url, options});
-        if (requests.length === 1) {
-            return response({
-                id: 42,
-                account: {login: 'kyaulabs'},
-                repository_selection: 'selected',
-            });
-        }
-        return response({
-            token: 'opaque-synthetic-installation-token',
-            expires_at: '2026-08-29T01:00:00.000Z',
-            permissions: {contents: 'write', pull_requests: 'write'},
-            repositories: [{
-                id: 7,
-                name: 'prism-adapters',
-                full_name: 'kyaulabs/prism-adapters',
-            }],
-        }, {status: 201});
-    };
+const CREDENTIAL = 'opaque-synthetic-publication-credential';
 
-    const result = await mintPublisherToken({
-        appId: '12345',
-        privateKeyBytes,
-        fetchImpl,
-        now,
-    });
-
-    assert.deepEqual(result, {
-        token: 'opaque-synthetic-installation-token',
-        expiresAt: '2026-08-29T01:00:00.000Z',
-    });
-    assert.equal(requests[0].url, 'https://api.github.com/repos/kyaulabs/prism-adapters/installation');
-    const jwt = requests[0].options.headers.authorization.slice('Bearer '.length);
-    const [encodedHeader, encodedPayload, encodedSignature] = jwt.split('.');
-    assert.deepEqual(JSON.parse(Buffer.from(encodedHeader, 'base64url')), {
-        alg: 'RS256',
-        typ: 'JWT',
-    });
-    assert.deepEqual(JSON.parse(Buffer.from(encodedPayload, 'base64url')), {
-        iat: 1787961540,
-        exp: 1787962140,
-        iss: 12345,
-    });
-    assert.equal(verify(
-        'RSA-SHA256',
-        Buffer.from(`${encodedHeader}.${encodedPayload}`),
-        publicKey,
-        Buffer.from(encodedSignature, 'base64url'),
-    ), true);
-    assert.equal(
-        requests[1].url,
-        'https://api.github.com/app/installations/42/access_tokens',
-    );
-    assert.deepEqual(JSON.parse(requests[1].options.body), {
-        repositories: ['prism-adapters'],
-        permissions: {contents: 'write', pull_requests: 'write'},
-    });
-});
-
-test('rejects malformed or overbroad installation-token authority', async () => {
-    const {privateKey} = generateKeyPairSync('rsa', {modulusLength: 2048});
-    const privateKeyBytes = Buffer.from(privateKey.export({type: 'pkcs8', format: 'pem'}));
-    const now = new Date('2026-08-29T00:00:00.000Z');
-
-    await assert.rejects(mintPublisherToken({
-        appId: '0',
-        privateKeyBytes,
-        fetchImpl: async () => {
-            throw new Error('must not fetch');
-        },
-        now,
-    }), /GitHub publication authentication is invalid/);
-
-    const fetchImpl = async (url) => url.endsWith('/installation')
-        ? response({id: 42, account: {login: 'kyaulabs'}, repository_selection: 'selected'})
-        : response({
-            token: 'opaque-token',
-            expires_at: '2026-08-29T01:00:00.000Z',
-            permissions: {contents: 'write', pull_requests: 'write', administration: 'write'},
-            repositories: [{
-                id: 7,
-                name: 'prism-adapters',
-                full_name: 'kyaulabs/prism-adapters',
-            }],
-        }, {status: 201});
-
-    await assert.rejects(mintPublisherToken({
-        appId: '12345',
-        privateKeyBytes,
-        fetchImpl,
-        now,
-    }), /GitHub publication authentication is invalid/);
-});
+function assertCredentialBoundary(requests) {
+    for (const {url, options} of requests) {
+        assert.match(url, /^https:\/\/api[.]github[.]com\/repos\/kyaulabs\/prism-adapters\//);
+        assert.equal(options.headers.authorization, `Bearer ${CREDENTIAL}`);
+        if (options.body !== undefined) assert.doesNotMatch(options.body, new RegExp(CREDENTIAL));
+    }
+}
 
 test('fails closed when the open pull-request snapshot is paginated', async () => {
     const baseSha = 'a'.repeat(40);
@@ -153,7 +57,7 @@ test('fails closed when the open pull-request snapshot is paginated', async () =
     };
 
     await assert.rejects(publishCatalogueCandidate({
-        token: 'opaque-synthetic-installation-token',
+        token: CREDENTIAL,
         intent,
         sourceBytes,
         envelopeBytes,
@@ -231,7 +135,7 @@ test('reports exact existing branch and pull request as idempotent success', asy
     };
 
     const result = await publishCatalogueCandidate({
-        token: 'opaque-synthetic-installation-token',
+        token: CREDENTIAL,
         intent,
         sourceBytes,
         envelopeBytes,
@@ -246,6 +150,7 @@ test('reports exact existing branch and pull request as idempotent success', asy
         pullRequestNumber: 17,
     });
     assert.equal(requests.some(({options}) => options.method === 'POST'), false);
+    assertCredentialBoundary(requests);
 });
 
 test('creates one commit, atomic sequence ref, and human-merged pull request', async () => {
@@ -339,7 +244,7 @@ test('creates one commit, atomic sequence ref, and human-merged pull request', a
     };
 
     const result = await publishCatalogueCandidate({
-        token: 'opaque-synthetic-installation-token',
+        token: CREDENTIAL,
         intent,
         sourceBytes,
         envelopeBytes,
@@ -374,6 +279,7 @@ test('creates one commit, atomic sequence ref, and human-merged pull request', a
         maintainer_can_modify: false,
         draft: false,
     });
+    assertCredentialBoundary(requests);
 });
 
 test('recovers exact ref and pull-request creation races without overwriting', async () => {
@@ -460,7 +366,7 @@ test('recovers exact ref and pull-request creation races without overwriting', a
     };
 
     assert.deepEqual(await publishCatalogueCandidate({
-        token: 'opaque-synthetic-installation-token',
+        token: CREDENTIAL,
         intent,
         sourceBytes,
         envelopeBytes,

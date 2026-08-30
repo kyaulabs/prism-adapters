@@ -1,27 +1,26 @@
 // $KYAULabs: github-publication.js kyau@aura.kyaulabs 2026/08/29 -0700 Exp $
 
-import {createHash, createPrivateKey, sign} from 'node:crypto';
+import {createHash} from 'node:crypto';
 
 import {decidePublication} from './publication-state.js';
 
 const REPOSITORY_API = 'https://api.github.com/repos/kyaulabs/prism-adapters';
-const APP_API = 'https://api.github.com/app';
 const API_VERSION = '2026-03-10';
 const USER_AGENT = '@kyaulabs/prism-adapters-catalogue';
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
-function invalid() {
-    return new Error('GitHub publication authentication is invalid');
+function publicationInvalid() {
+    return new Error('GitHub publication state is invalid');
 }
 
 async function responseBytes(response) {
     const declared = response.headers?.get?.('content-length');
     if (declared !== null && declared !== undefined &&
         (!/^\d+$/.test(declared) || Number(declared) > MAX_RESPONSE_BYTES)) {
-        throw invalid();
+        throw publicationInvalid();
     }
     const reader = response.body?.getReader?.();
-    if (!reader) throw invalid();
+    if (!reader) throw publicationInvalid();
     const chunks = [];
     let length = 0;
     while (true) {
@@ -31,127 +30,12 @@ async function responseBytes(response) {
         length += chunk.length;
         if (length > MAX_RESPONSE_BYTES) {
             await reader.cancel().catch(() => {});
-            throw invalid();
+            throw publicationInvalid();
         }
         chunks.push(chunk);
     }
-    if (length === 0) throw invalid();
+    if (length === 0) throw publicationInvalid();
     return Buffer.concat(chunks, length);
-}
-
-async function requestJson({url, method, authorization, body, expectedStatus, fetchImpl}) {
-    let response;
-    try {
-        response = await fetchImpl(url, {
-            method,
-            redirect: 'manual',
-            credentials: 'omit',
-            cache: 'no-store',
-            referrerPolicy: 'no-referrer',
-            headers: {
-                accept: 'application/vnd.github+json',
-                authorization,
-                'content-type': 'application/json',
-                'user-agent': USER_AGENT,
-                'x-github-api-version': API_VERSION,
-            },
-            ...(body === undefined ? {} : {body: JSON.stringify(body)}),
-            signal: AbortSignal.timeout(10_000),
-        });
-    } catch {
-        throw invalid();
-    }
-    if (response?.redirected === true || response?.status !== expectedStatus) throw invalid();
-    try {
-        return JSON.parse((await responseBytes(response)).toString('utf8'));
-    } catch (error) {
-        if (error.message === invalid().message) throw error;
-        throw invalid();
-    }
-}
-
-function encode(value) {
-    return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
-}
-
-function appJwt({appId, privateKeyBytes, now}) {
-    if (typeof appId !== 'string' || !/^[1-9]\d{0,15}$/.test(appId) ||
-        !Buffer.isBuffer(privateKeyBytes) || privateKeyBytes.length === 0 ||
-        !(now instanceof Date) || !Number.isFinite(now.getTime())) {
-        throw invalid();
-    }
-    let privateKey;
-    try {
-        privateKey = createPrivateKey({key: privateKeyBytes, format: 'pem'});
-    } catch {
-        throw invalid();
-    }
-    if (privateKey.asymmetricKeyType !== 'rsa') throw invalid();
-    const nowSeconds = Math.floor(now.getTime() / 1000);
-    const header = encode({alg: 'RS256', typ: 'JWT'});
-    const payload = encode({iat: nowSeconds - 60, exp: nowSeconds + 540, iss: Number(appId)});
-    const signingInput = `${header}.${payload}`;
-    const signature = sign('RSA-SHA256', Buffer.from(signingInput), privateKey);
-    return `${signingInput}.${signature.toString('base64url')}`;
-}
-
-function validTokenResponse(value, now) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value) ||
-        typeof value.token !== 'string' || value.token.length === 0 ||
-        value.token.length > 4096 || typeof value.expires_at !== 'string' ||
-        value.permissions === null || typeof value.permissions !== 'object' ||
-        Array.isArray(value.permissions) || !Array.isArray(value.repositories) ||
-        value.repositories.length !== 1) {
-        return false;
-    }
-    const permissionKeys = Object.keys(value.permissions).sort();
-    if (!permissionKeys.every((key) => ['contents', 'metadata', 'pull_requests'].includes(key)) ||
-        value.permissions.contents !== 'write' ||
-        value.permissions.pull_requests !== 'write' ||
-        (value.permissions.metadata !== undefined && value.permissions.metadata !== 'read')) {
-        return false;
-    }
-    const repository = value.repositories[0];
-    if (repository?.name !== 'prism-adapters' ||
-        repository?.full_name !== 'kyaulabs/prism-adapters') {
-        return false;
-    }
-    const expires = new Date(value.expires_at);
-    return Number.isFinite(expires.getTime()) && expires.getTime() > now.getTime() &&
-        expires.getTime() <= now.getTime() + 60 * 60 * 1000;
-}
-
-export async function mintPublisherToken({appId, privateKeyBytes, fetchImpl, now = new Date()}) {
-    const jwt = appJwt({appId, privateKeyBytes, now});
-    const installation = await requestJson({
-        url: `${REPOSITORY_API}/installation`,
-        method: 'GET',
-        authorization: `Bearer ${jwt}`,
-        expectedStatus: 200,
-        fetchImpl,
-    });
-    if (!Number.isSafeInteger(installation?.id) || installation.id <= 0 ||
-        installation?.account?.login !== 'kyaulabs' ||
-        installation.repository_selection !== 'selected') {
-        throw invalid();
-    }
-    const token = await requestJson({
-        url: `${APP_API}/installations/${installation.id}/access_tokens`,
-        method: 'POST',
-        authorization: `Bearer ${jwt}`,
-        body: {
-            repositories: ['prism-adapters'],
-            permissions: {contents: 'write', pull_requests: 'write'},
-        },
-        expectedStatus: 201,
-        fetchImpl,
-    });
-    if (!validTokenResponse(token, now)) throw invalid();
-    return Object.freeze({token: token.token, expiresAt: token.expires_at});
-}
-
-function publicationInvalid() {
-    return new Error('GitHub publication state is invalid');
 }
 
 async function publicationRequest({
