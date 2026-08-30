@@ -59,15 +59,13 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'repository_dispatch' ||
        github.event_name == 'schedule' ||
-       github.event_name == 'workflow_dispatch') &&
-      vars.CATALOGUE_SIGNING_ENABLED == 'true'
+       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: catalogue-signing
     permissions:
       contents: read
     env:
-      CATALOGUE_SIGNING_ENABLED: 'true'
       CATALOGUE_SIGNING_ENVIRONMENT: catalogue-signing
     steps:
       - name: Refuse Actions debug logging
@@ -111,22 +109,13 @@ jobs:
         if: steps.preparation.outputs.publication_ready == 'true'
         shell: bash
         env:
-          APP_ID: ${{ vars.CATALOGUE_PUBLICATION_APP_ID }}
-          APP_PRIVATE_KEY: ${{ secrets.CATALOGUE_PUBLICATION_APP_PRIVATE_KEY }}
+          CATALOGUE_PUBLICATION_TOKEN: ${{ secrets.CATALOGUE_PUBLICATION_TOKEN }}
         run: |
           set +x
-          umask 077
-          app_directory="${RUNNER_TEMP}/prism-catalogue-publication"
-          trap 'rm -rf -- "$app_directory"' EXIT HUP INT TERM
-          rm -rf -- "$app_directory"
-          mkdir --mode=700 -- "$app_directory"
-          printf '%s' "$APP_PRIVATE_KEY" > "$app_directory/app.pem"
-          unset APP_PRIVATE_KEY
           npm run catalogue:publish-protected
-      - name: Remove protected publication state
+      - name: Remove protected signing state
         if: always()
         shell: bash
         run: |
           set +x
-          rm -rf -- "${RUNNER_TEMP}/prism-catalogue-publication"
           rm -rf -- "${RUNNER_TEMP}/prism-catalogue-signing"
