@@ -93,6 +93,13 @@ deployment branches to `main`, and add separate environment secrets named
 `CATALOGUE_SIGNING_PRIVATE_KEY`, `CATALOGUE_SIGNING_PASSPHRASE`, and
 `CATALOGUE_PUBLICATION_TOKEN`.
 
+The protected job remains disabled unless the repository Actions variable
+`CATALOGUE_SIGNING_ENABLED` has the exact value `true`. Leave the variable
+absent until maintainers have reviewed the environment, deployment policy,
+credential custody, log retention, workflow, and offline recovery readiness.
+Removing the variable disables signing and publication without disabling
+synthetic validation.
+
 The publication secret is a fine-grained PAT owned by `kyaulabs-bot`, with
 resource owner `kyaulabs`. Limit access to only `kyaulabs/prism-adapters`.
 Grant Contents write and Pull Requests write only;

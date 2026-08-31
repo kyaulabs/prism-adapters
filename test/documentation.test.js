@@ -29,7 +29,7 @@ test('documents evidence-backed preparation commands', () => {
 test('documents protected signing custody and recovery', () => {
     assert.match(context, /protected signing environment/);
     assert.match(readme, /catalogue-signing/);
-    assert.doesNotMatch(`${readme}\n${security}\n${context}`, /CATALOGUE_SIGNING_ENABLED/);
+    assert.match(`${readme}\n${security}\n${context}`, /CATALOGUE_SIGNING_ENABLED/);
     assert.match(readme, /catalogue:sign-protected/);
     assert.doesNotMatch(readme, /Sign as the human key custodian/);
     assert.match(security, /environment-scoped GitHub Actions secrets/);
@@ -43,6 +43,25 @@ test('documents protected signing custody and recovery', () => {
         manifest.scripts['catalogue:sign-protected'],
         'node src/protected-runner.js',
     );
+});
+
+test('documents exact activation and the superseding decision', async () => {
+    const priorDecision = await readFile(
+        new URL('../adr/0002-use-direct-pat-for-catalogue-publication.md', import.meta.url),
+        'utf8',
+    );
+    const activationDecision = await readFile(
+        new URL('../adr/0003-use-direct-pat-with-explicit-catalogue-activation.md', import.meta.url),
+        'utf8',
+    );
+
+    assert.match(readme, /CATALOGUE_SIGNING_ENABLED.*exact value `true`/is);
+    assert.match(security, /CATALOGUE_SIGNING_ENABLED.*exact string `true`/is);
+    assert.match(context, /activation-gated.*CATALOGUE_SIGNING_ENABLED.*exact string `true`/is);
+    assert.match(priorDecision, /## Status\n\nSuperseded by ADR-0003/);
+    assert.match(activationDecision, /## Status\n\nAccepted/);
+    assert.match(activationDecision, /supersedes ADR-0002/i);
+    assert.match(activationDecision, /direct.*PAT/is);
 });
 
 test('documents sequence-safe direct publication authentication', () => {

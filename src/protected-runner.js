@@ -20,6 +20,7 @@ function trustedRunner(env) {
         env.GITHUB_WORKFLOW_REF === WORKFLOW_REF &&
         EVENTS.has(env.GITHUB_EVENT_NAME) &&
         env.CATALOGUE_SIGNING_ENVIRONMENT === 'catalogue-signing' &&
+        env.CATALOGUE_SIGNING_ENABLED === 'true' &&
         env.RUNNER_DEBUG !== '1' &&
         env.ACTIONS_STEP_DEBUG !== 'true' &&
         env.ACTIONS_RUNNER_DEBUG !== 'true' &&
