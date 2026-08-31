@@ -32,6 +32,7 @@ async function fixture() {
             GITHUB_WORKFLOW_REF: 'kyaulabs/prism-adapters/.github/workflows/catalogue-signing.yml@refs/heads/main',
             RUNNER_TEMP: runnerTemp,
             CATALOGUE_SIGNING_ENVIRONMENT: 'catalogue-signing',
+            CATALOGUE_SIGNING_ENABLED: 'true',
         },
     };
 }
@@ -84,6 +85,11 @@ for (const [name, change] of [
         GITHUB_WORKFLOW_REF: 'kyaulabs/prism-adapters/.github/workflows/catalogue-signing.yml@refs/heads/feature',
     }],
     ['debug runner', {RUNNER_DEBUG: '1'}],
+    ['missing activation', {CATALOGUE_SIGNING_ENABLED: undefined}],
+    ['false activation', {CATALOGUE_SIGNING_ENABLED: 'false'}],
+    ['uppercase activation', {CATALOGUE_SIGNING_ENABLED: 'TRUE'}],
+    ['whitespace-padded activation', {CATALOGUE_SIGNING_ENABLED: ' true '}],
+    ['malformed activation', {CATALOGUE_SIGNING_ENABLED: 'enabled'}],
 ]) {
     test(`rejects ${name} before protected signing`, async () => {
         const value = await fixture();
