@@ -290,7 +290,7 @@ prism-tool commit create --type fix --scope publication --subject "sign canonica
 - Consumes: `signPublicationCommit({treeSha, parentSha, message, now, ...commitSigning})` and fixed commit-signing paths supplied by the protected runner.
 - Produces: a signed create-commit request whose response must prove valid GitHub verification before the existing `main` recheck and ref request.
 
-- [ ] **Step 1: Add a failing verified-commit creation test**
+- [x] **Step 1: Add a failing verified-commit creation test**
 
 Extend the creation fixture so the injected signer returns:
 
@@ -305,13 +305,13 @@ Extend the creation fixture so the injected signer returns:
 
 The fake create-commit response returns the same signature and payload with `verified: true` and `reason: valid`. Assert the request body contains exact message, tree, parents, author, committer, and signature fields and that the first `/git/refs` request occurs after the verified response.
 
-- [ ] **Step 2: Run the publication test to verify Red**
+- [x] **Step 2: Run the publication test to verify Red**
 
 Run: `node --test test/github-publication.test.js`
 
 Expected: FAIL because the create-commit request has no signature, author, or committer.
 
-- [ ] **Step 3: Integrate signing into branch creation**
+- [x] **Step 3: Integrate signing into branch creation**
 
 Change `createSequenceBranch()` to call the injected signer after tree creation and before `/git/commits`. Send:
 
@@ -339,7 +339,7 @@ if (verification?.verified !== true || verification.reason !== 'valid' ||
 
 Only after this gate may code recheck `main` and call `/git/refs`.
 
-- [ ] **Step 4: Add the complete failure matrix**
+- [x] **Step 4: Add the complete failure matrix**
 
 Use table-driven tests for absent verification, false verification, `unsigned`, `unknown_key`, `bad_email`, `unverified_email`, `malformed_signature`, `invalid`, `gpgverify_error`, `gpgverify_unavailable`, mismatched signature, mismatched payload, and malformed commit SHA. For each case, collect request paths and assert no `/git/refs` or `/pulls` POST occurs.
 
@@ -347,7 +347,7 @@ Add a signer-rejection test asserting no `/git/commits`, `/git/refs`, or `/pulls
 
 Update idempotent existing-state tests to prove the signer is never called when no branch creation is needed.
 
-- [ ] **Step 5: Run focused publication tests**
+- [x] **Step 5: Run focused publication tests**
 
 Run: `node --test test/github-publication.test.js`
 
@@ -357,7 +357,7 @@ Run: `node --test test/publication-state.test.js test/github-publication.test.js
 
 Expected: PASS with all state-machine behavior preserved.
 
-- [ ] **Step 6: Create the GitHub verification commit**
+- [x] **Step 6: Create the GitHub verification commit**
 
 Stage only the files listed in this task, load `conventional-commits`, and run this as the sole tool call in its assistant batch:
 
