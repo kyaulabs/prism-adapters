@@ -165,7 +165,7 @@ prism-tool commit create --type fix --scope security --subject "pin publication 
 - Consumes: `COMMIT_SIGNING_POLICY`, the public export path, owner-only encrypted signing-subkey and passphrase files, an isolated home path, commit tree/parent/message/time, and an injectable `spawnImpl`.
 - Produces: `canonicalCommit({treeSha, parentSha, message, now, policy})` and `signPublicationCommit(options)`, returning `{author, committer, payload, signature}`.
 
-- [ ] **Step 1: Write failing canonical-payload tests**
+- [x] **Step 1: Write failing canonical-payload tests**
 
 Add tests that freeze `now` at `2026-08-31T12:34:56.789Z` and require this exact payload, with no trailing newline:
 
@@ -180,13 +180,13 @@ chore(catalogue): publish sequence 8
 
 The returned API date for author and committer must be `2026-08-31T12:34:56.000Z`. Add rejection cases for malformed SHAs, multiline messages, invalid dates, and altered policy identity.
 
-- [ ] **Step 2: Run the canonical test to verify Red**
+- [x] **Step 2: Run the canonical test to verify Red**
 
 Run: `node --test test/commit-signing.test.js`
 
 Expected: FAIL because `src/commit-signing.js` does not exist.
 
-- [ ] **Step 3: Implement canonical payload construction**
+- [x] **Step 3: Implement canonical payload construction**
 
 Use this public shape:
 
@@ -213,7 +213,7 @@ export function canonicalCommit({treeSha, parentSha, message, now, policy = COMM
 
 Validate SHA, message, date, name, and email before constructing bytes. Reject carriage returns, line feeds, NULs, non-UTC/invalid instants, and any production-policy mutation.
 
-- [ ] **Step 4: Add the synthetic GnuPG fixture and failing signing tests**
+- [x] **Step 4: Add the synthetic GnuPG fixture and failing signing tests**
 
 `test/helpers/openpgp.js` must create a temporary `GNUPGHOME`, generate a synthetic Ed25519 certification key plus one signing subkey, export public and encrypted secret-subkey material, write an owner-only passphrase file, and return dynamic fingerprints and paths. It invokes `/usr/bin/gpg` with argument arrays and sends its synthetic passphrase through file descriptor 3.
 
@@ -232,7 +232,7 @@ Add tests for:
 - child environment containing only `HOME`, `GNUPGHOME`, `LANG`, and `LC_ALL`;
 - no synthetic passphrase or private-key bytes in errors or captured output.
 
-- [ ] **Step 5: Implement the bounded GnuPG boundary**
+- [x] **Step 5: Implement the bounded GnuPG boundary**
 
 `signPublicationCommit()` must:
 
@@ -243,9 +243,9 @@ Add tests for:
 5. inspect `--with-colons --with-subkey-fingerprint --list-keys` and `--list-secret-keys` output for the exact UID and both fingerprints;
 6. construct canonical payload bytes;
 7. call GnuPG with `--armor --detach-sign --local-user <signing-fingerprint>! --digest-algo SHA256`, passing the passphrase on descriptor 3;
-8. verify with `--verify - /proc/self/fd/3`, passing the signature on stdin and payload on descriptor 3;
+8. write the payload and signature to fixed owner-only files inside the isolated home using exclusive creation, verify them with `--verify <signature-path> <payload-path>`, and never place either path outside that home;
 9. return the author, committer, payload string, and armored signature;
-10. remove the isolated home in `finally`.
+10. remove the isolated home and both verification files in `finally`.
 
 The child process wrapper uses `/usr/bin/gpg`, `shell: false`, a 10-second timer, 65,536-byte stdout/stderr bounds, and this exact child environment:
 
@@ -260,7 +260,7 @@ The child process wrapper uses `/usr/bin/gpg`, `shell: false`, a 10-second timer
 
 All failure paths throw `new Error('publication commit signing failed')` without child output or secret-bearing causes.
 
-- [ ] **Step 6: Run focused and complete signing tests**
+- [x] **Step 6: Run focused and complete signing tests**
 
 Run: `node --test test/commit-signing.test.js`
 
@@ -270,7 +270,7 @@ Run: `node --test test/commit-signing-policy.test.js test/commit-signing.test.js
 
 Expected: PASS.
 
-- [ ] **Step 7: Create the signing-boundary commit**
+- [x] **Step 7: Create the signing-boundary commit**
 
 Stage only the files listed in this task, load `conventional-commits`, and run this as the sole tool call in its assistant batch:
 
