@@ -47,6 +47,7 @@
 ### Task 1: Pin the production public commit-signing policy
 
 **Files:**
+
 - Create: `src/commit-signing-policy.js`
 - Create: `test/commit-signing-policy.test.js`
 - Add: `publication-commit-signing-public.asc`
@@ -57,6 +58,7 @@
 - Add: `docs/plans/2026-08-31-signed-catalogue-publication-commits.md`
 
 **Interfaces:**
+
 - Consumes: the human-provisioned public-only OpenPGP export.
 - Produces: `COMMIT_SIGNING_POLICY` and `verifyCommitSigningPublicExport({filePath})` for the signing module.
 
@@ -157,11 +159,13 @@ prism-tool commit create --type fix --scope security --subject "pin publication 
 ### Task 2: Sign canonical commit payloads through bounded GnuPG
 
 **Files:**
+
 - Create: `src/commit-signing.js`
 - Create: `test/commit-signing.test.js`
 - Create: `test/helpers/openpgp.js`
 
 **Interfaces:**
+
 - Consumes: `COMMIT_SIGNING_POLICY`, the public export path, owner-only encrypted signing-subkey and passphrase files, an isolated home path, commit tree/parent/message/time, and an injectable `spawnImpl`.
 - Produces: `canonicalCommit({treeSha, parentSha, message, now, policy})` and `signPublicationCommit(options)`, returning `{author, committer, payload, signature}`.
 
@@ -283,10 +287,12 @@ prism-tool commit create --type fix --scope publication --subject "sign canonica
 ### Task 3: Require valid GitHub verification before ref creation
 
 **Files:**
+
 - Modify: `src/github-publication.js`
 - Modify: `test/github-publication.test.js`
 
 **Interfaces:**
+
 - Consumes: `signPublicationCommit({treeSha, parentSha, message, now, ...commitSigning})` and fixed commit-signing paths supplied by the protected runner.
 - Produces: a signed create-commit request whose response must prove valid GitHub verification before the existing `main` recheck and ref request.
 
@@ -370,12 +376,14 @@ prism-tool commit create --type fix --scope publication --subject "require valid
 ### Task 4: Isolate commit-signing credentials in protected publication
 
 **Files:**
+
 - Modify: `src/publication-runner.js`
 - Modify: `test/publication-runner.test.js`
 - Modify: `.github/workflows/catalogue-signing.yml`
 - Modify: `test/workflow.test.js`
 
 **Interfaces:**
+
 - Consumes: fixed runner-private files `private.asc` and `passphrase` under `${RUNNER_TEMP}/prism-publication-commit-signing/` plus the committed public export.
 - Produces: `commitSigning` options passed to `publishCatalogueCandidate()` and unconditional cleanup of the complete runner-private directory.
 
@@ -451,15 +459,17 @@ prism-tool commit create --type fix --scope actions --subject "isolate publicati
 ### Task 5: Document custody, provisioning, exposure response, and sequence-2 recovery
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `SECURITY.md`
 - Modify: `test/documentation.test.js`
 
 **Interfaces:**
+
 - Consumes: accepted ADR-0005 and the protected workflow behavior.
 - Produces: human provisioning, rotation, revocation, succession, activation, and recovery instructions that never expose private material to agents.
 
-- [ ] **Step 1: Write failing documentation contract tests**
+- [x] **Step 1: Write failing documentation contract tests**
 
 Add assertions requiring documentation to name:
 
@@ -475,19 +485,19 @@ Add assertions requiring documentation to name:
 - human closure of PR 20 and deletion of `catalogue/sequence-2` only after repaired trusted `main` and custody readiness;
 - manual release recovery followed by GitHub `verified: true`, `reason: valid` confirmation.
 
-- [ ] **Step 2: Run documentation tests to verify Red**
+- [x] **Step 2: Run documentation tests to verify Red**
 
 Run: `node --test test/documentation.test.js`
 
 Expected: FAIL because the new custody and recovery contracts are absent.
 
-- [ ] **Step 3: Update operator and security documentation**
+- [x] **Step 3: Update operator and security documentation**
 
 In `README.md`, add the public export and GnuPG to requirements; document the fixed identity, public fingerprints, two environment secrets, external custody prohibition, protected runner flow, and exact human sequence-2 recovery order.
 
 In `SECURITY.md`, add a separate publication commit-signing custody section. State that suspected commit-key exposure disables activation, removes protected-environment access, revokes the GitHub GPG key, rotates through the offline certification authority, reviews audit and workflow access, registers the replacement public key, updates the reviewed repository policy, and re-provisions secrets before publication resumes. Keep catalogue-key Core-first rotation and PAT revocation procedures independent.
 
-- [ ] **Step 4: Run documentation and complete verification**
+- [x] **Step 4: Run documentation and complete verification**
 
 Run: `node --test test/documentation.test.js`
 
@@ -503,7 +513,7 @@ Expected: no output and exit status 0.
 
 Run `/check` and repeat repairs plus `/check` until green.
 
-- [ ] **Step 5: Create the terminal issue-closing commit**
+- [x] **Step 5: Create the terminal issue-closing commit**
 
 Stage only the files listed in this task plus any plan-authorized verification repair, load `conventional-commits`, and run this as the sole tool call in its assistant batch:
 

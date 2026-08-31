@@ -96,6 +96,30 @@ test('documents sequence-safe direct publication authentication', () => {
     assert.equal(manifest.scripts['catalogue:publish'], undefined);
 });
 
+test('documents publication commit-signing custody and sequence recovery', async () => {
+    const decision = await readFile(
+        new URL('../adr/0005-keep-publication-commit-signing-custody-outside-the-repository.md', import.meta.url),
+        'utf8',
+    );
+    const documentation = `${readme}\n${security}\n${context}\n${decision}`;
+
+    assert.match(documentation, /GnuPG `>=2[.]2[.]0 <3[.]0[.]0`/);
+    assert.match(documentation, /kyaulabs-bot <actions@kyaulabs[.]com>/);
+    assert.match(documentation, /CATALOGUE_COMMIT_SIGNING_PRIVATE_KEY/);
+    assert.match(documentation, /CATALOGUE_COMMIT_SIGNING_PASSPHRASE/);
+    assert.match(documentation, /outside every repository worktree/i);
+    assert.match(documentation, /PRISM_SENSITIVE_PATHS/);
+    assert.match(documentation, /passphrase.*separately/is);
+    assert.match(documentation, /genuinely offline recovery copy/i);
+    assert.match(documentation, /646340DAD3387E48F047B5C049659B98769C17D6/);
+    assert.match(documentation, /0DFDEF5324CDBFFC5C4850379D81C6E3F694B7FE/);
+    assert.match(documentation, /verified.*actions@kyaulabs[.]com/is);
+    assert.match(security, /commit-signing.*exposure/is);
+    assert.match(readme, /pull request 20.*catalogue\/sequence-2/is);
+    assert.match(readme, /verified: true.*reason: valid/is);
+    assert.match(security, /does not reuse.*catalogue.*key/is);
+});
+
 test('documents CI and automatic human-merged back-merges', () => {
     assert.match(readme, /pushes\s+and pull requests targeting `develop` and `main`/);
     assert.match(readme, /Allow GitHub Actions to create and approve pull\s+requests/);
