@@ -1,5 +1,6 @@
 // $KYAULabs: commit-signing.js kyau@aura.kyaulabs 2026/08/31 -0700 Exp $
 
+// nosemgrep: prism-no-child-process -- bounded GnuPG signing boundary accepted in ADR-0004
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {mkdir, rm, writeFile} from 'node:fs/promises';
