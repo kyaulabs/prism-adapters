@@ -25,7 +25,7 @@ test('separates signing and publication credentials behind read-only workflow pe
     assert.equal((workflow.match(/secrets[.]CATALOGUE_SIGNING_PRIVATE_KEY/g) ?? []).length, 1);
     assert.equal((workflow.match(/secrets[.]CATALOGUE_SIGNING_PASSPHRASE/g) ?? []).length, 1);
     assert.equal((workflow.match(/secrets[.]CATALOGUE_PUBLICATION_TOKEN/g) ?? []).length, 1);
-    assert.doesNotMatch(workflow, /CATALOGUE_SIGNING_ENABLED/);
+    assert.equal((workflow.match(/CATALOGUE_SIGNING_ENABLED/g) ?? []).length, 2);
     assert.doesNotMatch(workflow, /CATALOGUE_PUBLICATION_APP|APP_ID|APP_PRIVATE_KEY/);
     assert.equal((workflow.match(/npm run catalogue:prepare-trigger/g) ?? []).length, 2);
     assert.equal((workflow.match(/id: preparation/g) ?? []).length, 2);
@@ -46,6 +46,23 @@ test('separates signing and publication credentials behind read-only workflow pe
     );
     assert.match(workflow, /persist-credentials: false/);
     assert.match(workflow, /ref: \$\{\{ github[.]sha \}\}/);
+});
+
+test('keeps signing and publication behind exact activation', () => {
+    const protectedJobStart = workflow.indexOf('  protected-signing:');
+    assert.notEqual(protectedJobStart, -1);
+    const protectedJob = workflow.slice(protectedJobStart);
+    const jobPreamble = protectedJob.slice(0, protectedJob.indexOf('    runs-on:'));
+
+    assert.match(jobPreamble, /vars[.]CATALOGUE_SIGNING_ENABLED == 'true'/);
+    assert.match(
+        protectedJob,
+        /env:\n      CATALOGUE_SIGNING_ENABLED: 'true'\n      CATALOGUE_SIGNING_ENVIRONMENT: catalogue-signing/,
+    );
+    assert.match(
+        protectedJob,
+        /npm run catalogue:sign-protected[\s\S]+npm run catalogue:publish-protected/,
+    );
 });
 
 test('workflow disables tracing, uses signing private files, and always cleans', () => {

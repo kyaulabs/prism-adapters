@@ -48,10 +48,19 @@ exposure still requires Core-first trust-root rotation.
 
 ## Activation and recovery
 
-The protected environment deployment policy and trusted default-branch runner
-checks gate signing and publication. Human maintainers review the environment,
-three secrets, deployment policy, workflow, and log retention before production
-use.
+The repository Actions variable `CATALOGUE_SIGNING_ENABLED` records the human
+activation decision. The protected job and protected signing runner both
+require the exact string `true`; missing, false, case-variant,
+whitespace-padded, or malformed values fail closed before signing or
+publication. The workflow passes a fixed `true` marker to the runner only
+after the job-level guard succeeds.
+
+The activation variable supplements rather than replaces protected environment
+deployment policy and trusted default-branch runner checks. Human maintainers
+review the environment, three secrets, deployment policy, workflow, log
+retention, and offline recovery custody before setting it. Removing the
+variable disables protected signing and publication while leaving synthetic
+validation available.
 
 GitHub secret values cannot be retrieved after storage. Human maintainers keep
 an offline recovery copy of the encrypted PKCS#8 key and protect its passphrase
