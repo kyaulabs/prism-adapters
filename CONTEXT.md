@@ -52,7 +52,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 - Receives the encrypted PKCS#8 Ed25519 key and passphrase as separate environment-scoped GitHub Actions secrets.
 - Matches the committed Core SPKI fingerprint and key ID, signs and reverifies exact prepared payload bytes, and removes runner-private secret material on every exit path.
 - Produces no secret-bearing argument, log, output, summary, artifact, cache, fixture, or local state.
-- Remains activation-gated until human maintainers provision the environment, bound Actions log retention, and offline recovery custody.
+- Remains activation-gated: the repository Actions variable `CATALOGUE_SIGNING_ENABLED` must have the exact string `true` before the protected job receives signing or publication authority.
 
 ### Catalogue Publication Transaction
 
@@ -103,7 +103,8 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 ## Architectural Decisions
 
 - `adr/0001-adopt-prism-catalogue-publication-authority.md` — adopt the immutable Prism publication specification and ADRs as this publisher's authority while keeping issue #3 bounded to evidence resolution and deterministic source rendering.
-- `adr/0002-use-direct-pat-for-catalogue-publication.md` — use a protected, repository-scoped fine-grained PAT for publication authentication.
+- `adr/0002-use-direct-pat-for-catalogue-publication.md` — superseded by ADR-0003; introduced direct fine-grained PAT publication authentication.
+- `adr/0003-use-direct-pat-with-explicit-catalogue-activation.md` — retain direct PAT publication while requiring exact, independently enforced human activation.
 
 ## When to Update This File
 
