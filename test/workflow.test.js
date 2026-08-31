@@ -25,6 +25,12 @@ test('separates signing and publication credentials behind read-only workflow pe
     assert.equal((workflow.match(/secrets[.]CATALOGUE_SIGNING_PRIVATE_KEY/g) ?? []).length, 1);
     assert.equal((workflow.match(/secrets[.]CATALOGUE_SIGNING_PASSPHRASE/g) ?? []).length, 1);
     assert.equal((workflow.match(/secrets[.]CATALOGUE_PUBLICATION_TOKEN/g) ?? []).length, 1);
+    assert.equal((workflow.match(
+        /secrets[.]CATALOGUE_COMMIT_SIGNING_PRIVATE_KEY/g,
+    ) ?? []).length, 1);
+    assert.equal((workflow.match(
+        /secrets[.]CATALOGUE_COMMIT_SIGNING_PASSPHRASE/g,
+    ) ?? []).length, 1);
     assert.equal((workflow.match(/CATALOGUE_SIGNING_ENABLED/g) ?? []).length, 2);
     assert.doesNotMatch(workflow, /CATALOGUE_PUBLICATION_APP|APP_ID|APP_PRIVATE_KEY/);
     assert.equal((workflow.match(/npm run catalogue:prepare-trigger/g) ?? []).length, 2);
@@ -70,7 +76,16 @@ test('workflow disables tracing, uses signing private files, and always cleans',
     assert.match(workflow, /set \+x/);
     assert.match(workflow, /umask 077/);
     assert.match(workflow, /trap 'rm -rf -- "\$secret_directory"' EXIT HUP INT TERM/);
+    assert.match(workflow,
+        /commit_signing_directory="\$\{RUNNER_TEMP\}\/prism-publication-commit-signing"/);
+    assert.match(workflow,
+        /trap 'rm -rf -- "\$commit_signing_directory"' EXIT HUP INT TERM/);
+    assert.match(workflow,
+        /unset ENCRYPTED_COMMIT_SIGNING_PRIVATE_KEY COMMIT_SIGNING_PASSPHRASE/);
+    assert.match(workflow, /commit_signing_directory\/private[.]asc/);
+    assert.match(workflow, /commit_signing_directory\/passphrase/);
     assert.doesNotMatch(workflow, /app_directory|app[.]pem/);
+    assert.doesNotMatch(workflow, /echo .*COMMIT_SIGNING|GITHUB_STEP_SUMMARY/);
     assert.match(workflow, /if: always[(][)]/);
     assert.match(workflow, /npm run catalogue:sign-protected/);
     assert.match(workflow, /npm run catalogue:verify/);

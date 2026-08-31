@@ -379,7 +379,7 @@ prism-tool commit create --type fix --scope publication --subject "require valid
 - Consumes: fixed runner-private files `private.asc` and `passphrase` under `${RUNNER_TEMP}/prism-publication-commit-signing/` plus the committed public export.
 - Produces: `commitSigning` options passed to `publishCatalogueCandidate()` and unconditional cleanup of the complete runner-private directory.
 
-- [ ] **Step 1: Write failing protected-runner path and cleanup tests**
+- [x] **Step 1: Write failing protected-runner path and cleanup tests**
 
 Extend the publication-runner fixture with owner-only synthetic files under:
 
@@ -401,21 +401,21 @@ commitSigning: {
 
 Assert the directory is absent after both successful and rejected publication. Assert a relative, in-worktree, or equal-to-worktree `RUNNER_TEMP` never triggers fallback cleanup.
 
-- [ ] **Step 2: Run the runner test to verify Red**
+- [x] **Step 2: Run the runner test to verify Red**
 
 Run: `node --test test/publication-runner.test.js`
 
 Expected: FAIL because no commit-signing paths are passed and no directory is cleaned.
 
-- [ ] **Step 3: Add fixed paths and defensive cleanup**
+- [x] **Step 3: Add fixed paths and defensive cleanup**
 
 Derive the signing directory only after existing trusted-runner checks. Pass the exact object above to `publishImpl`, pass the injected `now` through for commit timestamps, and remove the signing directory in `finally` with Node's `rm({recursive: true, force: true})`. Preserve the existing generic `protected catalogue publication failed` boundary.
 
-- [ ] **Step 4: Write failing workflow isolation tests**
+- [x] **Step 4: Write failing workflow isolation tests**
 
 Require each new secret reference to occur exactly once, only in the publication step. Require `set +x`, `umask 077`, an exit trap, owner-only directory creation, fixed filenames, environment unsetting, and the absence of outputs, summaries, artifacts, caches, command arguments containing values, or debug logging.
 
-- [ ] **Step 5: Stage secrets in the protected workflow**
+- [x] **Step 5: Stage secrets in the protected workflow**
 
 The publication step uses:
 
@@ -428,7 +428,7 @@ env:
 
 Its shell body creates `${RUNNER_TEMP}/prism-publication-commit-signing` with mode `700`, writes `private.asc` and `passphrase` under `umask 077`, unsets both raw signing environment variables, invokes `npm run catalogue:publish-protected`, and removes the directory through an `EXIT HUP INT TERM` trap. The always-run cleanup step also removes this directory. Keep workflow `GITHUB_TOKEN` permissions read-only.
 
-- [ ] **Step 6: Run runner and workflow tests**
+- [x] **Step 6: Run runner and workflow tests**
 
 Run: `node --test test/publication-runner.test.js test/workflow.test.js`
 
@@ -438,7 +438,7 @@ Run: `npm test`
 
 Expected: complete suite PASS.
 
-- [ ] **Step 7: Create the protected workflow commit**
+- [x] **Step 7: Create the protected workflow commit**
 
 Stage only the files listed in this task, load `conventional-commits`, and run this as the sole tool call in its assistant batch:
 

@@ -1,6 +1,7 @@
 // $KYAULabs: publication-runner.js kyau@aura.kyaulabs 2026/08/29 -0700 Exp $
 
 import {createHash} from 'node:crypto';
+import {rm} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -119,10 +120,15 @@ export async function runProtectedPublication({
     publishImpl = publishCatalogueCandidate,
     fetchImpl = globalThis.fetch,
 } = {}) {
+    let commitSigningDirectory = null;
     try {
         if (!trustedRunner({cwd, env})) {
             throw new Error('protected publication runner is not trusted');
         }
+        commitSigningDirectory = path.join(
+            env.RUNNER_TEMP,
+            'prism-publication-commit-signing',
+        );
         const [sourceBytes, envelopeBytes, triggerBytes, publicKey] = await Promise.all([
             readBoundedRegularFile({
                 filePath: path.join(cwd, 'catalogue-source.json'),
@@ -177,6 +183,13 @@ export async function runProtectedPublication({
             envelopeBytes,
             title: `chore(catalogue): publish sequence ${intent.sequence}`,
             body: pullRequestBody({verified, triggerRecord}),
+            now,
+            commitSigning: {
+                publicKeyPath: path.join(cwd, 'publication-commit-signing-public.asc'),
+                privateKeyPath: path.join(commitSigningDirectory, 'private.asc'),
+                passphrasePath: path.join(commitSigningDirectory, 'passphrase'),
+                homePath: path.join(commitSigningDirectory, 'gnupg'),
+            },
             fetchImpl,
         });
         stdout.write(
@@ -188,6 +201,10 @@ export async function runProtectedPublication({
         if (error instanceof Error &&
             error.message === 'protected publication runner is not trusted') throw error;
         throw new Error('protected catalogue publication failed', {cause: error});
+    } finally {
+        if (commitSigningDirectory !== null) {
+            await rm(commitSigningDirectory, {recursive: true, force: true}).catch(() => {});
+        }
     }
 }
 
