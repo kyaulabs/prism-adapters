@@ -59,13 +59,15 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'repository_dispatch' ||
        github.event_name == 'schedule' ||
-       github.event_name == 'workflow_dispatch')
+       github.event_name == 'workflow_dispatch') &&
+      vars.CATALOGUE_SIGNING_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: catalogue-signing
     permissions:
       contents: read
     env:
+      CATALOGUE_SIGNING_ENABLED: 'true'
       CATALOGUE_SIGNING_ENVIRONMENT: catalogue-signing
     steps:
       - name: Refuse Actions debug logging
