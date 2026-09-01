@@ -2,6 +2,7 @@
 
 import {createHash} from 'node:crypto';
 
+import {signPublicationCommit} from './commit-signing.js';
 import {decidePublication} from './publication-state.js';
 
 const REPOSITORY_API = 'https://api.github.com/repos/kyaulabs/prism-adapters';
@@ -207,7 +208,16 @@ function objectSha(value) {
     return value.sha;
 }
 
-async function createSequenceBranch({token, intent, sourceBytes, envelopeBytes, fetchImpl}) {
+async function createSequenceBranch({
+    token,
+    intent,
+    sourceBytes,
+    envelopeBytes,
+    now,
+    commitSigning,
+    signCommitImpl,
+    fetchImpl,
+}) {
     const baseCommit = await publicationRequest({
         path: `/git/commits/${intent.baseSha}`,
         token,
@@ -255,18 +265,36 @@ async function createSequenceBranch({token, intent, sourceBytes, envelopeBytes, 
         expectedStatuses: [201],
         fetchImpl,
     });
+    const treeSha = objectSha(tree.value);
+    const message = `chore(catalogue): publish sequence ${intent.sequence}`;
+    const signed = await signCommitImpl({
+        treeSha,
+        parentSha: intent.baseSha,
+        message,
+        now,
+        ...commitSigning,
+    });
     const commit = await publicationRequest({
         path: '/git/commits',
         token,
         method: 'POST',
         body: {
-            message: `chore(catalogue): publish sequence ${intent.sequence}`,
-            tree: objectSha(tree.value),
+            message,
+            tree: treeSha,
             parents: [intent.baseSha],
+            author: signed.author,
+            committer: signed.committer,
+            signature: signed.signature,
         },
         expectedStatuses: [201],
         fetchImpl,
     });
+    const verification = commit.value?.verification;
+    if (verification?.verified !== true || verification.reason !== 'valid' ||
+        verification.signature !== signed.signature ||
+        verification.payload !== signed.payload) {
+        throw publicationInvalid();
+    }
     const commitSha = objectSha(commit.value);
     const currentMain = await publicationRequest({
         path: '/git/ref/heads/main',
@@ -319,6 +347,9 @@ export async function publishCatalogueCandidate({
     envelopeBytes,
     title,
     body,
+    now = new Date(),
+    commitSigning = {},
+    signCommitImpl = signPublicationCommit,
     fetchImpl = globalThis.fetch,
 }) {
     if (!Buffer.isBuffer(sourceBytes) || sourceBytes.length === 0 ||
@@ -340,7 +371,16 @@ export async function publishCatalogueCandidate({
             });
         }
         if (decision.action === 'CREATE_BRANCH') {
-            await createSequenceBranch({token, intent, sourceBytes, envelopeBytes, fetchImpl});
+            await createSequenceBranch({
+                token,
+                intent,
+                sourceBytes,
+                envelopeBytes,
+                now,
+                commitSigning,
+                signCommitImpl,
+                fetchImpl,
+            });
             continue;
         }
         if (decision.action === 'CREATE_PULL_REQUEST') {

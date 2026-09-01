@@ -18,6 +18,20 @@ function sha256(bytes) {
 }
 
 const CREDENTIAL = 'opaque-synthetic-publication-credential';
+const SIGNED_COMMIT = Object.freeze({
+    author: Object.freeze({
+        name: 'kyaulabs-bot',
+        email: 'actions@kyaulabs.com',
+        date: '2026-08-31T12:34:56.000Z',
+    }),
+    committer: Object.freeze({
+        name: 'kyaulabs-bot',
+        email: 'actions@kyaulabs.com',
+        date: '2026-08-31T12:34:56.000Z',
+    }),
+    payload: 'synthetic canonical commit payload',
+    signature: '-----BEGIN PGP SIGNATURE-----\nsynthetic\n-----END PGP SIGNATURE-----\n',
+});
 
 function assertCredentialBoundary(requests) {
     for (const {url, options} of requests) {
@@ -81,6 +95,7 @@ test('reports exact existing branch and pull request as idempotent success', asy
         envelopeDigest: sha256(envelopeBytes),
     };
     const requests = [];
+    let signerCalled = false;
     const fetchImpl = async (url, options) => {
         requests.push({url, options});
         if (url.endsWith('/git/ref/heads/main')) {
@@ -142,6 +157,10 @@ test('reports exact existing branch and pull request as idempotent success', asy
         title: 'chore(catalogue): publish sequence 8',
         body: 'Synthetic publication body',
         fetchImpl,
+        signCommitImpl: async () => {
+            signerCalled = true;
+            return SIGNED_COMMIT;
+        },
     });
 
     assert.deepEqual(result, {
@@ -150,6 +169,7 @@ test('reports exact existing branch and pull request as idempotent success', asy
         pullRequestNumber: 17,
     });
     assert.equal(requests.some(({options}) => options.method === 'POST'), false);
+    assert.equal(signerCalled, false);
     assertCredentialBoundary(requests);
 });
 
@@ -202,7 +222,16 @@ test('creates one commit, atomic sequence ref, and human-merged pull request', a
             return response({sha: '4'.repeat(40)}, {status: 201});
         }
         if (pathname.endsWith('/git/commits') && options.method === 'POST') {
-            return response({sha: commitSha}, {status: 201});
+            const request = JSON.parse(options.body);
+            return response({
+                sha: commitSha,
+                verification: {
+                    verified: true,
+                    reason: 'valid',
+                    signature: request.signature,
+                    payload: SIGNED_COMMIT.payload,
+                },
+            }, {status: 201});
         }
         if (pathname.endsWith('/git/refs')) {
             branchCreated = true;
@@ -251,6 +280,15 @@ test('creates one commit, atomic sequence ref, and human-merged pull request', a
         title: 'chore(catalogue): publish sequence 8',
         body: 'Synthetic publication body',
         fetchImpl,
+        now: new Date('2026-08-31T12:34:56.789Z'),
+        commitSigning: {synthetic: true},
+        signCommitImpl: async (input) => {
+            assert.equal(input.treeSha, '4'.repeat(40));
+            assert.equal(input.parentSha, baseSha);
+            assert.equal(input.message, 'chore(catalogue): publish sequence 8');
+            assert.equal(input.synthetic, true);
+            return SIGNED_COMMIT;
+        },
     });
 
     assert.deepEqual(result, {
@@ -267,6 +305,14 @@ test('creates one commit, atomic sequence ref, and human-merged pull request', a
         '/repos/kyaulabs/prism-adapters/git/refs',
         '/repos/kyaulabs/prism-adapters/pulls',
     ]);
+    assert.deepEqual(JSON.parse(posts[3].options.body), {
+        message: 'chore(catalogue): publish sequence 8',
+        tree: '4'.repeat(40),
+        parents: [baseSha],
+        author: SIGNED_COMMIT.author,
+        committer: SIGNED_COMMIT.committer,
+        signature: SIGNED_COMMIT.signature,
+    });
     assert.deepEqual(JSON.parse(posts[4].options.body), {
         ref: 'refs/heads/catalogue/sequence-8',
         sha: commitSha,
@@ -327,7 +373,16 @@ test('recovers exact ref and pull-request creation races without overwriting', a
         }
         if (pathname.endsWith('/git/trees')) return response({sha: '4'.repeat(40)}, {status: 201});
         if (pathname.endsWith('/git/commits') && options.method === 'POST') {
-            return response({sha: commitSha}, {status: 201});
+            const request = JSON.parse(options.body);
+            return response({
+                sha: commitSha,
+                verification: {
+                    verified: true,
+                    reason: 'valid',
+                    signature: request.signature,
+                    payload: SIGNED_COMMIT.payload,
+                },
+            }, {status: 201});
         }
         if (pathname.endsWith('/git/refs')) {
             branchCreated = true;
@@ -373,11 +428,153 @@ test('recovers exact ref and pull-request creation races without overwriting', a
         title: 'chore(catalogue): publish sequence 8',
         body: 'Synthetic publication body',
         fetchImpl,
+        now: new Date('2026-08-31T12:34:56.789Z'),
+        commitSigning: {synthetic: true},
+        signCommitImpl: async () => SIGNED_COMMIT,
     }), {
         state: 'IDEMPOTENT',
         branchName: intent.branchName,
         pullRequestNumber: 17,
     });
+});
+
+test('creates no ref or pull request for invalid GitHub commit verification', async () => {
+    const reasons = [
+        undefined,
+        'unsigned',
+        'unknown_key',
+        'bad_email',
+        'unverified_email',
+        'malformed_signature',
+        'invalid',
+        'gpgverify_error',
+        'gpgverify_unavailable',
+    ];
+    const cases = [
+        ...reasons.map((reason) => reason === undefined
+            ? {verification: undefined}
+            : {verification: {verified: false, reason,
+                signature: SIGNED_COMMIT.signature, payload: SIGNED_COMMIT.payload}}),
+        {verification: {verified: true, reason: 'valid',
+            signature: 'different', payload: SIGNED_COMMIT.payload}},
+        {verification: {verified: true, reason: 'valid',
+            signature: SIGNED_COMMIT.signature, payload: 'different'}},
+        {verification: {verified: true, reason: 'valid',
+            signature: SIGNED_COMMIT.signature, payload: SIGNED_COMMIT.payload}, sha: 'bad'},
+    ];
+    for (const [index, value] of cases.entries()) {
+        const baseSha = 'a'.repeat(40);
+        const sourceBytes = Buffer.from('{"schemaVersion":1,"adapters":[]}\n');
+        const envelopeBytes = Buffer.from('{"synthetic":"signed-envelope"}\n');
+        const requests = [];
+        let blob = 0;
+        const fetchImpl = async (url, options) => {
+            requests.push({url, options});
+            const pathname = new URL(url).pathname;
+            if (pathname.endsWith('/git/ref/heads/main')) {
+                return response({ref: 'refs/heads/main', object: {type: 'commit', sha: baseSha}});
+            }
+            if (pathname.endsWith('/pulls') && options.method === 'GET') return response([]);
+            if (pathname.includes('/git/ref/heads/catalogue%2Fsequence-8')) {
+                return new Response(null, {status: 404});
+            }
+            if (pathname.endsWith(`/git/commits/${baseSha}`)) {
+                return response({sha: baseSha, tree: {sha: '1'.repeat(40)}});
+            }
+            if (pathname.endsWith('/git/blobs')) {
+                blob += 1;
+                return response({sha: String(blob + 1).repeat(40)}, {status: 201});
+            }
+            if (pathname.endsWith('/git/trees')) {
+                return response({sha: '4'.repeat(40)}, {status: 201});
+            }
+            if (pathname.endsWith('/git/commits') && options.method === 'POST') {
+                return response({
+                    sha: value.sha ?? 'd'.repeat(40),
+                    ...(value.verification === undefined
+                        ? {}
+                        : {verification: value.verification}),
+                }, {status: 201});
+            }
+            throw new Error(`unexpected request in verification case ${index}: ${url}`);
+        };
+        await assert.rejects(publishCatalogueCandidate({
+            token: CREDENTIAL,
+            intent: {
+                baseSha,
+                sequence: 8,
+                branchName: 'catalogue/sequence-8',
+                sourceDigest: sha256(sourceBytes),
+                envelopeDigest: sha256(envelopeBytes),
+            },
+            sourceBytes,
+            envelopeBytes,
+            title: 'chore(catalogue): publish sequence 8',
+            body: 'Synthetic publication body',
+            fetchImpl,
+            now: new Date('2026-08-31T12:34:56.789Z'),
+            signCommitImpl: async () => SIGNED_COMMIT,
+        }), /GitHub publication state is invalid/);
+        const writes = requests.filter(({options}) => options.method === 'POST')
+            .map(({url}) => new URL(url).pathname);
+        assert.equal(writes.includes('/repos/kyaulabs/prism-adapters/git/refs'), false);
+        assert.equal(writes.includes('/repos/kyaulabs/prism-adapters/pulls'), false);
+    }
+});
+
+test('creates no commit, ref, or pull request when commit signing fails', async () => {
+    const baseSha = 'a'.repeat(40);
+    const sourceBytes = Buffer.from('{"schemaVersion":1,"adapters":[]}\n');
+    const envelopeBytes = Buffer.from('{"synthetic":"signed-envelope"}\n');
+    const requests = [];
+    let blob = 0;
+    const fetchImpl = async (url, options) => {
+        requests.push({url, options});
+        const pathname = new URL(url).pathname;
+        if (pathname.endsWith('/git/ref/heads/main')) {
+            return response({ref: 'refs/heads/main', object: {type: 'commit', sha: baseSha}});
+        }
+        if (pathname.endsWith('/pulls') && options.method === 'GET') return response([]);
+        if (pathname.includes('/git/ref/heads/catalogue%2Fsequence-8')) {
+            return new Response(null, {status: 404});
+        }
+        if (pathname.endsWith(`/git/commits/${baseSha}`)) {
+            return response({sha: baseSha, tree: {sha: '1'.repeat(40)}});
+        }
+        if (pathname.endsWith('/git/blobs')) {
+            blob += 1;
+            return response({sha: String(blob + 1).repeat(40)}, {status: 201});
+        }
+        if (pathname.endsWith('/git/trees')) {
+            return response({sha: '4'.repeat(40)}, {status: 201});
+        }
+        throw new Error(`unexpected request after signing failure: ${url}`);
+    };
+
+    await assert.rejects(publishCatalogueCandidate({
+        token: CREDENTIAL,
+        intent: {
+            baseSha,
+            sequence: 8,
+            branchName: 'catalogue/sequence-8',
+            sourceDigest: sha256(sourceBytes),
+            envelopeDigest: sha256(envelopeBytes),
+        },
+        sourceBytes,
+        envelopeBytes,
+        title: 'chore(catalogue): publish sequence 8',
+        body: 'Synthetic publication body',
+        fetchImpl,
+        now: new Date('2026-08-31T12:34:56.789Z'),
+        signCommitImpl: async () => {
+            throw new Error('synthetic signing failure');
+        },
+    }), /synthetic signing failure/);
+    const writes = requests.filter(({options}) => options.method === 'POST')
+        .map(({url}) => new URL(url).pathname);
+    assert.equal(writes.includes('/repos/kyaulabs/prism-adapters/git/commits'), false);
+    assert.equal(writes.includes('/repos/kyaulabs/prism-adapters/git/refs'), false);
+    assert.equal(writes.includes('/repos/kyaulabs/prism-adapters/pulls'), false);
 });
 
 // vim: ft=javascript sts=4 sw=4 ts=4 et :
