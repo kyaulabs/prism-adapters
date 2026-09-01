@@ -22,6 +22,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 | deterministic catalogue source | The complete unsigned source policy rendered solely from validated release evidence and preserved verified records. |
 | catalogue publication transaction | The serialized cross-repository workflow that validates evidence, signs the next sequence in the protected publisher environment, and opens a human-merged publication pull request. |
 | protected signing environment | The dedicated GitHub Actions environment that exposes separate encrypted-key, passphrase, and publication secrets only to trusted default-branch catalogue signing and publication code. |
+| publication commit-signing identity | The separately custodied OpenPGP identity that signs automated catalogue publication commits as `kyaulabs-bot <actions@kyaulabs.com>` without gaining catalogue-signing or publication authorization. |
 
 ## Entities and Invariants
 
@@ -51,6 +52,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 - Runs only trusted `main` publisher code on a GitHub-hosted ephemeral runner after unprivileged validation and synthetic-key tests pass.
 - Receives the encrypted PKCS#8 Ed25519 key and passphrase as separate environment-scoped GitHub Actions secrets.
 - Matches the committed Core SPKI fingerprint and key ID, signs and reverifies exact prepared payload bytes, and removes runner-private secret material on every exit path.
+- Keeps catalogue signing, publication commit signing, and publication authorization as independent authorities; only the protected signing subkey enters the runner, while certification and recovery authority remain offline.
 - Produces no secret-bearing argument, log, output, summary, artifact, cache, fixture, or local state.
 - Remains activation-gated: the repository Actions variable `CATALOGUE_SIGNING_ENABLED` must have the exact string `true` before the protected job receives signing or publication authority.
 
@@ -60,6 +62,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 - Each run binds the next sequence, deterministic source, signed envelope, and publication intent to an attested `main` commit, then rechecks that base before publication.
 - A sequence branch is immutable after atomic creation. Automation never updates or force-pushes it.
 - Only exact partial branch or pull-request state is recoverable; conflicting bytes, base, signature, sequence, or open publication state fails closed.
+- Requires local OpenPGP verification and GitHub `verified: true`, `reason: valid` commit verification before creating a sequence ref or pull request.
 - A fine-grained PAT owned by `kyaulabs-bot`, limited to `kyaulabs/prism-adapters` with Contents write and Pull Requests write, creates only the sequence branch and pull request. It has no Actions write permission. Human maintainers review and merge every publication pull request.
 
 ### Failure Boundary
@@ -75,6 +78,7 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 - Publisher-side GitHub and npm evidence validation.
 - Deterministic catalogue source rendering.
 - Public catalogue payload and envelope validation.
+- Publisher-side publication commit signing and the pre-ref GitHub verification gate.
 - Publisher workflow behavior assigned by the accepted cross-repository transaction.
 
 ### This repository delegates
@@ -105,6 +109,8 @@ Prism Core owns adapter release declarations and emits minimal release notificat
 - `adr/0001-adopt-prism-catalogue-publication-authority.md` — adopt the immutable Prism publication specification and ADRs as this publisher's authority while keeping issue #3 bounded to evidence resolution and deterministic source rendering.
 - `adr/0002-use-direct-pat-for-catalogue-publication.md` — superseded by ADR-0003; introduced direct fine-grained PAT publication authentication.
 - `adr/0003-use-direct-pat-with-explicit-catalogue-activation.md` — retain direct PAT publication while requiring exact, independently enforced human activation.
+- `adr/0004-use-separate-openpgp-publication-commit-signing.md` — superseded by ADR-0005; introduced separate OpenPGP publication commit signing.
+- `adr/0005-keep-publication-commit-signing-custody-outside-the-repository.md` — retain separate OpenPGP commit signing while keeping all private and recovery material outside repository worktrees.
 
 ## When to Update This File
 

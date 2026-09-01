@@ -18,7 +18,16 @@ function sha256(bytes) {
 async function fixture() {
     const cwd = await mkdtemp(path.join(tmpdir(), 'prism-publication-runner-'));
     const runnerTemp = await mkdtemp(path.join(tmpdir(), 'prism-publication-secrets-'));
+    const commitSigningDirectory = path.join(
+        runnerTemp,
+        'prism-publication-commit-signing',
+    );
     await mkdir(path.join(cwd, '.publisher'), {mode: 0o700});
+    await mkdir(commitSigningDirectory, {mode: 0o700});
+    await writeFile(path.join(commitSigningDirectory, 'private.asc'),
+        'synthetic encrypted signing subkey', {mode: 0o600});
+    await writeFile(path.join(commitSigningDirectory, 'passphrase'),
+        'synthetic commit-signing passphrase', {mode: 0o600});
     const signing = generateKeyPairSync('ed25519');
     const publicDer = signing.publicKey.export({type: 'spki', format: 'der'});
     const fingerprint = sha256(publicDer);
@@ -70,6 +79,7 @@ async function fixture() {
     return {
         cwd,
         runnerTemp,
+        commitSigningDirectory,
         fingerprint,
         sourceBytes,
         envelopeBytes,
@@ -119,6 +129,14 @@ test('reverifies and publishes only the fixed protected catalogue candidate', as
     assert.deepEqual(publication.sourceBytes, value.sourceBytes);
     assert.deepEqual(publication.envelopeBytes, value.envelopeBytes);
     assert.equal(publication.token, 'opaque-synthetic-publication-credential');
+    assert.deepEqual(publication.commitSigning, {
+        publicKeyPath: path.join(value.cwd, 'publication-commit-signing-public.asc'),
+        privateKeyPath: path.join(value.commitSigningDirectory, 'private.asc'),
+        passphrasePath: path.join(value.commitSigningDirectory, 'passphrase'),
+        homePath: path.join(value.commitSigningDirectory, 'gnupg'),
+    });
+    assert.equal(publication.now.toISOString(), '2026-08-29T00:00:00.000Z');
+    assert.equal(publication.token, 'opaque-synthetic-publication-credential');
     assert.equal(publication.title, 'chore(catalogue): publish sequence 8');
     assert.match(publication.body, /Sequence: 8/);
     assert.match(publication.body, /Base commit: `a{40}`/);
@@ -132,6 +150,10 @@ test('reverifies and publishes only the fixed protected catalogue candidate', as
     });
     assert.equal(output, 'published catalogue sequence 8 branch catalogue/sequence-8 PR #17 state IDEMPOTENT\n');
     assert.doesNotMatch(output, /opaque-synthetic-publication-credential/);
+    await assert.rejects(readFile(path.join(value.commitSigningDirectory, 'private.asc')),
+        /ENOENT/);
+    await assert.rejects(readFile(path.join(value.commitSigningDirectory, 'passphrase')),
+        /ENOENT/);
 });
 
 for (const [name, change] of [
@@ -198,6 +220,41 @@ test('rejects an absent publication credential before publication', async () => 
         },
     }), /protected catalogue publication failed/);
     assert.equal(called, false);
+});
+
+test('cleans commit-signing files when protected publication fails', async () => {
+    const value = await fixture();
+
+    await assert.rejects(runProtectedPublication({
+        cwd: value.cwd,
+        env: value.env,
+        now: new Date('2026-08-29T00:00:00.000Z'),
+        expectedFingerprint: value.fingerprint,
+        stdout: {write: () => {}},
+        publishImpl: async () => {
+            throw new Error('synthetic publication failure');
+        },
+    }), /protected catalogue publication failed/);
+    await assert.rejects(readFile(path.join(value.commitSigningDirectory, 'private.asc')),
+        /ENOENT/);
+    await assert.rejects(readFile(path.join(value.commitSigningDirectory, 'passphrase')),
+        /ENOENT/);
+});
+
+test('does not clean a fallback commit-signing path for untrusted runner temp', async () => {
+    const value = await fixture();
+    const fallbackDirectory = path.join(value.cwd, 'prism-publication-commit-signing');
+    await mkdir(fallbackDirectory, {mode: 0o700});
+    await writeFile(path.join(fallbackDirectory, 'sentinel'), 'keep');
+
+    await assert.rejects(runProtectedPublication({
+        cwd: value.cwd,
+        env: {...value.env, RUNNER_TEMP: 'relative'},
+        now: new Date('2026-08-29T00:00:00.000Z'),
+        expectedFingerprint: value.fingerprint,
+        stdout: {write: () => {}},
+    }), /protected publication runner is not trusted/);
+    assert.equal(await readFile(path.join(fallbackDirectory, 'sentinel'), 'utf8'), 'keep');
 });
 
 // vim: ft=javascript sts=4 sw=4 ts=4 et :

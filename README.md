@@ -16,7 +16,9 @@ private signing key.
 - Linux with mounted `/proc` descriptor paths
 - Node.js 22.19 or newer
 - npm
+- GnuPG `>=2.2.0 <3.0.0`
 - the committed `adapter-catalogue-public.pem`
+- the committed `publication-commit-signing-public.asc`
 - a dedicated encrypted PKCS#8 Ed25519 private key with an offline recovery copy
 - a separately protected signing-key passphrase
 - a `catalogue-signing` GitHub Actions environment restricted to `main`
@@ -90,8 +92,9 @@ success or failure.
 
 Human administrators create the `catalogue-signing` environment, restrict its
 deployment branches to `main`, and add separate environment secrets named
-`CATALOGUE_SIGNING_PRIVATE_KEY`, `CATALOGUE_SIGNING_PASSPHRASE`, and
-`CATALOGUE_PUBLICATION_TOKEN`.
+`CATALOGUE_SIGNING_PRIVATE_KEY`, `CATALOGUE_SIGNING_PASSPHRASE`,
+`CATALOGUE_PUBLICATION_TOKEN`, `CATALOGUE_COMMIT_SIGNING_PRIVATE_KEY`, and
+`CATALOGUE_COMMIT_SIGNING_PASSPHRASE`.
 
 The protected job remains disabled unless the repository Actions variable
 `CATALOGUE_SIGNING_ENABLED` has the exact value `true`. Leave the variable
@@ -118,6 +121,40 @@ copies from those sources. A successor receives repository/environment
 administration and signing custody through an explicit out-of-band handoff.
 See `SECURITY.md` for exposure and Core-first rotation procedures.
 
+## Publication commit signing
+
+Automated publication commits use the separate OpenPGP identity
+`kyaulabs-bot <actions@kyaulabs.com>`. The bot account must keep that email
+verified and register `publication-commit-signing-public.asc`. The trusted
+fingerprints are:
+
+```text
+Primary: 646340DAD3387E48F047B5C049659B98769C17D6
+Signing: 0DFDEF5324CDBFFC5C4850379D81C6E3F694B7FE
+```
+
+The offline certification key controls an Ed25519 signing subkey. Store the
+encrypted certification key, encrypted signing-subkey export, and recovery
+public copy in an owner-restricted directory outside every repository worktree.
+Store the passphrase separately, keep a genuinely offline recovery copy, and
+add the external custody directory's absolute path to `PRISM_SENSITIVE_PATHS`
+before agent sessions. Agents never inspect, generate, copy, or operate on that
+directory. Only the public export belongs in this repository.
+
+The protected publication step receives the encrypted signing-subkey export as
+`CATALOGUE_COMMIT_SIGNING_PRIVATE_KEY` and its passphrase as
+`CATALOGUE_COMMIT_SIGNING_PASSPHRASE`. It writes both to owner-only
+runner-private files, unsets the raw environment values, uses an isolated GnuPG
+home, and removes the complete directory on every exit path. It does not reuse
+the catalogue signing key: catalogue signing, publication commit signing, and
+PAT authorization remain separate authorities.
+
+The publisher signs the canonical commit payload locally, reverifies it, sends
+the detached signature to GitHub, and requires `verified: true` and
+`reason: valid` before creating the sequence ref or pull request. Signing or
+verification failure can leave unreachable Git objects but creates no branch or
+pull request.
+
 ## Automated publication
 
 A repository dispatch after a stable Prism release, a daily schedule with a
@@ -137,15 +174,23 @@ npm run catalogue:publish-protected
 ```
 
 The command passes the opaque protected publication credential only to the fixed
-repository API, rechecks remote `main`, and creates one immutable
-`catalogue/sequence-<n>` branch plus one pull request. Exact partial state is
-idempotent or recoverable;
+repository API, creates and verifies one signed commit, rechecks remote `main`,
+and creates one immutable `catalogue/sequence-<n>` branch plus one pull request.
+Exact partial state is idempotent or recoverable;
 a stale base, different bytes, invalid signature, conflicting sequence, or
 another open publication pull request fails closed.
 
 Manual recovery accepts `renewal` or `release`. Release recovery also requires
 the stable version and immutable Prism merge commit. It cannot supply sequence,
 branch, package, compatibility, registry, or payload authority.
+
+For the blocked sequence 2 incident, leave pull request 20 and
+`catalogue/sequence-2` unchanged until the repaired workflow, registered public
+key, five protected secrets, and recovery documentation reach trusted `main`.
+A human then closes pull request 20, deletes the old sequence branch, and runs
+manual release recovery. Confirm the replacement commit reports
+`verified: true` and `reason: valid` through GitHub before human review and
+merge. Automation never performs the cleanup.
 
 ## Verify and publish
 

@@ -112,8 +112,18 @@ jobs:
         shell: bash
         env:
           CATALOGUE_PUBLICATION_TOKEN: ${{ secrets.CATALOGUE_PUBLICATION_TOKEN }}
+          ENCRYPTED_COMMIT_SIGNING_PRIVATE_KEY: ${{ secrets.CATALOGUE_COMMIT_SIGNING_PRIVATE_KEY }}
+          COMMIT_SIGNING_PASSPHRASE: ${{ secrets.CATALOGUE_COMMIT_SIGNING_PASSPHRASE }}
         run: |
           set +x
+          umask 077
+          commit_signing_directory="${RUNNER_TEMP}/prism-publication-commit-signing"
+          trap 'rm -rf -- "$commit_signing_directory"' EXIT HUP INT TERM
+          rm -rf -- "$commit_signing_directory"
+          mkdir --mode=700 -- "$commit_signing_directory"
+          printf '%s' "$ENCRYPTED_COMMIT_SIGNING_PRIVATE_KEY" > "$commit_signing_directory/private.asc"
+          printf '%s' "$COMMIT_SIGNING_PASSPHRASE" > "$commit_signing_directory/passphrase"
+          unset ENCRYPTED_COMMIT_SIGNING_PRIVATE_KEY COMMIT_SIGNING_PASSPHRASE
           npm run catalogue:publish-protected
       - name: Remove protected signing state
         if: always()
@@ -121,3 +131,4 @@ jobs:
         run: |
           set +x
           rm -rf -- "${RUNNER_TEMP}/prism-catalogue-signing"
+          rm -rf -- "${RUNNER_TEMP}/prism-publication-commit-signing"
